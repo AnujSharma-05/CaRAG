@@ -133,3 +133,31 @@ async def delete_document(
             asyncio.create_task(services.update_categorical_summary(category_name))
 
     return {"message": "Document deleted.", "id": doc_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /groups/{group_id}/categories — List all distinct categories in a group
+# Used by the frontend to show a category picker for Mode B chat.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/{group_id}/categories")
+async def list_group_categories(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _assert_membership(db, group_id, current_user.id)
+
+    rows = (
+        db.query(models.Document.category)
+        .filter(
+            models.Document.group_id == group_id,
+            models.Document.status == "ready",
+            models.Document.category.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+
+    # Filter out "general" — it's a fallback, not a meaningful user-facing category
+    categories = sorted([r.category for r in rows if r.category and r.category != "general"])
+    return {"group_id": group_id, "categories": categories}

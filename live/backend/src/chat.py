@@ -61,76 +61,98 @@ async def group_chat(
         from src.services import _embed_query
         from src.llm_service import generate_answer, classify_query_category
         query_vector = _embed_query(payload.question)
-
-        # ── STEP 2: Category Triage (search Milvus category summaries) ──────────
-        # The engine already stored category summary embeddings in a separate
-        # Milvus collection when documents were ingested. We search those to
-        # find which category this question most likely belongs to.
-        try:
-            category_matches = milvus_store.search_categories(query_vector, top_k=5)
-        except Exception:
-            category_matches = []
-
         hits = []
 
-        # ── STEP 3: Confidence Check ─────────────────────────────────────────────
-        # If no category match scores above 0.35, the question is too broad
-        # for category routing. Fall back to a flat search across the group.
-        if not category_matches or category_matches[0]["score"] < 0.35:
-            print(f"Low category confidence. Running flat search across group {group_id}.")
+        # ── MODE A: User pinned to a specific document ───────────────────────────
+        # Most precise scope possible. We still validate the doc belongs to THIS
+        # group to prevent cross-group data leaks even if a doc_id is guessed.
+        if payload.document_id is not None:
+            doc = db.query(models.Document).filter(
+                models.Document.id == payload.document_id,
+                models.Document.group_id == group_id,   # security: must be in this group
+                models.Document.status == "ready",
+            ).first()
+            if not doc:
+                return schemas.ChatResponse(
+                    answer="That document doesn't exist in this group or isn't ready yet.",
+                    citations=[],
+                )
             hits = milvus_store.search(
                 query_embedding=query_vector,
                 top_k=max(1, min(payload.top_k, 10)),
-                document_ids=group_doc_ids,   # <-- still group-scoped
+                document_id=payload.document_id,  # single-doc Milvus filter
             )
-        else:
-            # ── STEP 4: LLM Routing (LLM Call #1) ──────────────────────────────
-            # Ask the LLM: "Given these candidate categories, which one does this
-            # question belong to?" This is a cheap classification call, not a
-            # full generation. It returns just a category name string.
-            try:
-                chosen_category = await classify_query_category(
-                    question=payload.question,
-                    category_candidates=category_matches,
-                )
-            except Exception:
-                # If LLM routing fails, just use the top scoring category
-                chosen_category = category_matches[0]["category_name"]
 
-            # Safety: if the LLM returned a hallucinated category name, fall back
-            candidate_names = [m["category_name"] for m in category_matches]
-            if chosen_category not in candidate_names:
-                chosen_category = category_matches[0]["category_name"]
-
-            print(f"LLM routed query to category: '{chosen_category}'")
-
-            # ── STEP 5: Scoped Category Search ──────────────────────────────────
-            # Get doc IDs that are BOTH:
-            #   a) in this group (security boundary)
-            #   b) in the chosen category (precision routing)
-            # This is the intersection of two filters.
+        # ── MODE B: User manually selected a category ────────────────────────────
+        # User picked from the list returned by GET /groups/{id}/categories.
+        # Double-filtered: must be in this group AND in the chosen category.
+        elif payload.category is not None:
             category_doc_ids = [
                 row.id
                 for row in db.query(models.Document.id).filter(
-                    models.Document.group_id == group_id,        # ← group filter
-                    models.Document.category == chosen_category, # ← category filter
+                    models.Document.group_id == group_id,
+                    models.Document.category == payload.category,
                     models.Document.status == "ready",
                 ).all()
             ]
-
-            if category_doc_ids:
-                hits = milvus_store.search(
-                    query_embedding=query_vector,
-                    top_k=max(1, min(payload.top_k, 10)),
-                    document_ids=category_doc_ids,  # tightest possible scope
+            if not category_doc_ids:
+                return schemas.ChatResponse(
+                    answer=f"No ready documents found in category '{payload.category}' within this group.",
+                    citations=[],
                 )
-            else:
-                # Category had no matching docs in this group, fall back to group-wide
-                print(f"No docs in category '{chosen_category}' for this group. Falling back.")
+            hits = milvus_store.search(
+                query_embedding=query_vector,
+                top_k=max(1, min(payload.top_k, 10)),
+                document_ids=category_doc_ids,
+            )
+
+        # ── MODE C: Automatic 2-stage categorical routing (default) ─────────────
+        # No manual override — engine figures out the best category automatically.
+        else:
+            # STEP 2: Search Milvus category summary collection
+            try:
+                category_matches = milvus_store.search_categories(query_vector, top_k=5)
+            except Exception:
+                category_matches = []
+
+            # STEP 3: Confidence gate — flat search if no strong category match
+            if not category_matches or category_matches[0]["score"] < 0.35:
+                print(f"Low category confidence. Running flat search across group {group_id}.")
                 hits = milvus_store.search(
                     query_embedding=query_vector,
                     top_k=max(1, min(payload.top_k, 10)),
                     document_ids=group_doc_ids,
+                )
+            else:
+                # STEP 4: LLM routing — cheap classification call, returns category name
+                try:
+                    chosen_category = await classify_query_category(
+                        question=payload.question,
+                        category_candidates=category_matches,
+                    )
+                except Exception:
+                    chosen_category = category_matches[0]["category_name"]
+
+                # Guard: if LLM hallucinated a category name, fall back to top match
+                candidate_names = [m["category_name"] for m in category_matches]
+                if chosen_category not in candidate_names:
+                    chosen_category = category_matches[0]["category_name"]
+
+                print(f"LLM routed to category: '{chosen_category}'")
+
+                # STEP 5: Intersection of group + category filters
+                scoped_ids = [
+                    row.id
+                    for row in db.query(models.Document.id).filter(
+                        models.Document.group_id == group_id,
+                        models.Document.category == chosen_category,
+                        models.Document.status == "ready",
+                    ).all()
+                ]
+                hits = milvus_store.search(
+                    query_embedding=query_vector,
+                    top_k=max(1, min(payload.top_k, 10)),
+                    document_ids=scoped_ids if scoped_ids else group_doc_ids,
                 )
 
         if not hits:
