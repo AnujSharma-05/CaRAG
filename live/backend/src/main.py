@@ -19,7 +19,7 @@ from src import services
 
 # Local live imports
 from .database import engine, Base, get_db
-from . import auth
+from . import auth, groups, documents, chat
 
 # Create all tables (Users, Groups, etc.)
 Base.metadata.create_all(bind=engine)
@@ -42,8 +42,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Wire up the Auth router
+# Wire up all routers
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+app.include_router(groups.router, prefix="/groups", tags=["Groups"])
+app.include_router(documents.router, prefix="/groups", tags=["Documents"])
+app.include_router(chat.router, prefix="/groups", tags=["Chat"])
 
 @app.get("/ping")
 async def ping():
