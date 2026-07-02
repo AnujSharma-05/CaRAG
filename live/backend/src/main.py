@@ -9,9 +9,9 @@ from contextlib import asynccontextmanager
 # ==========================================
 # CRITICAL: Path manipulation for Monorepo
 # ==========================================
-# We must add the original 'backend' directory to the Python path 
+# We must add the original 'core_backend' directory to the Python path 
 # so we can import 'services.py' directly without duplicating it.
-backend_dir = Path(__file__).parent.parent.parent.parent / "backend"
+backend_dir = Path(__file__).parent.parent.parent.parent / "core_backend"
 sys.path.append(str(backend_dir))
 
 # Now we can import from the original CaRAG engine!
@@ -19,7 +19,7 @@ from src import services
 
 # Local live imports
 from .database import engine, Base, get_db
-from . import auth, groups, documents, chat
+from . import auth, groups, documents, chat, ws
 
 # Create all tables (Users, Groups, etc.)
 Base.metadata.create_all(bind=engine)
@@ -47,6 +47,7 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(groups.router, prefix="/groups", tags=["Groups"])
 app.include_router(documents.router, prefix="/groups", tags=["Documents"])
 app.include_router(chat.router, prefix="/groups", tags=["Chat"])
+app.include_router(ws.router, prefix="/ws", tags=["WebSocket"])
 
 @app.get("/ping")
 async def ping():

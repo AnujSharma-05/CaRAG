@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "CaRAG Docs": {
+      "type": "sse",
+      "url": "https://gitmcp.io/AnujSharma-05/CaRAG/"
+    }
+  }
+}

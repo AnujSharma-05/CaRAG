@@ -28,10 +28,42 @@ EMBEDDING_MODEL_INSTANCE = SentenceTransformer(
 
 
 def _extract_text_from_pdf(file_path: str) -> str:
-
     reader = PdfReader(file_path)
     pages = [page.extract_text() or "" for page in reader.pages]
     return "\n".join(pages).strip()
+
+def _extract_summary_text_from_pdf(file_path: str) -> str:
+    try:
+        reader = PdfReader(file_path)
+        total_pages = len(reader.pages)
+        if total_pages == 0:
+            return ""
+        
+        first_pages_limit = min(5, total_pages)
+        first_pages_text = []
+        for i in range(first_pages_limit):
+            txt = reader.pages[i].extract_text()
+            if txt:
+                first_pages_text.append(txt)
+                
+        last_pages_text = []
+        if total_pages > 5:
+            last_pages_start = max(5, total_pages - 2)
+            for i in range(last_pages_start, total_pages):
+                txt = reader.pages[i].extract_text()
+                if txt:
+                    last_pages_text.append(txt)
+                    
+        parts = []
+        if first_pages_text:
+            parts.append("--- START OF DOCUMENT ---\n" + "\n".join(first_pages_text))
+        if last_pages_text:
+            parts.append("--- END OF DOCUMENT ---\n" + "\n".join(last_pages_text))
+            
+        return "\n\n".join(parts).strip()
+    except Exception as e:
+        print("Failed to extract summary text from PDF:", e)
+        return ""
 
 def _chunk_text(
     text: str,
@@ -65,32 +97,32 @@ def _embed_query(text: str) -> list[float]:
     return _embed_texts([text])[0]
 
 
-async def update_categorical_summary(category_name: str) -> None:
+async def update_categorical_summary(category_name: str, group_id: int | None = None) -> None:
     """Consolidate document contents in the category and update its Milvus summary embedding."""
     if not category_name or category_name == "general":
         return
 
     db: Session = sessionLocal()
     try:
-        # Fetch all documents in this category
-        docs = db.query(models.Document).filter(
-            models.Document.category == category_name,
+        # Fetch all documents in this category and group
+        query = db.query(models.Document).join(models.Document.categories).filter(
+            models.Category.name == category_name,
             models.Document.status == "ready"
-        ).all()
+        )
+        if group_id is not None:
+            query = query.filter(models.Document.group_id == group_id)
+        docs = query.all()
         
         if not docs:
             return
 
-        # Compile summaries or first chunks of documents to create a category context
+        # Compile summaries or first/last chunks of documents to create a category context
         context_parts = []
         for doc in docs:
-            # Get first chunk content
-            first_chunk = db.query(models.DocumentChunk).filter(
-                models.DocumentChunk.document_id == doc.id
-            ).order_by(models.DocumentChunk.chunk_index.asc()).first()
-            
-            if first_chunk:
-                context_parts.append(f"Document '{doc.filename}': {first_chunk.content[:1000]}")
+            # Extract first 5 and last 2 pages of PDF on-the-fly
+            doc_context = _extract_summary_text_from_pdf(doc.file_path)
+            meta_info = f"Document: {doc.filename}\nSize: {doc.file_size or 0} bytes\n"
+            context_parts.append(meta_info + doc_context[:4000])
 
         category_context = "\n\n".join(context_parts)
         
@@ -116,12 +148,99 @@ async def update_categorical_summary(category_name: str) -> None:
         milvus_store.upsert_category_summary(
             category_name=category_name,
             summary=summary_text,
-            embedding=summary_vector
+            embedding=summary_vector,
+            group_id=group_id
         )
-        print(f"Updated category summary for '{category_name}': {summary_text[:100]}...")
+        print(f"Updated category summary for '{category_name}' in group {group_id}: {summary_text[:100]}...")
 
     except Exception as exc:
         print("Failed to update categorical summary:", exc)
+    finally:
+        db.close()
+
+
+async def consolidate_categories(group_id: int | None) -> None:
+    """Consolidate/generalize specific categories under parent categories like 'Harry Potter Books', 'Novels', etc."""
+    db: Session = sessionLocal()
+    try:
+        # Get all distinct categories in the group
+        categories = db.query(models.Category).filter(models.Category.group_id == group_id).all()
+        if len(categories) < 2:
+            return
+
+        # Prepare summary list for LLM analysis
+        candidates = []
+        for cat in categories:
+            candidates.append({
+                "id": cat.id,
+                "name": cat.name,
+                "summary": cat.summary or ""
+            })
+
+        # Prompt Gemini to identify relationships and recommend consolidation/grouping
+        prompt = f"""
+            You are an expert taxonomy and knowledge organization agent.
+            Analyze the following active document categories and summaries in this user's workspace:
+            
+            {candidates}
+            
+            Determine if any of these categories can be grouped under broader, general parent categories (e.g. "Novels", "Research Papers", "User Manuals", "Company Policies", "Harry Potter Books").
+            
+            Rules:
+            1. Suggest group pairings where sub-categories belong to a parent category.
+            2. Suggest parent categories that are clean, concise, and meaningful (e.g., if there are multiple parts of "Harry Potter", they belong to "Harry Potter Books" AND "Novels").
+            3. Each sub-category can map to MULTIPLE parent categories (e.g. "Sorcerer's Stone" belongs under "Harry Potter Books" and "Novels").
+            4. Respond ONLY with a JSON list of objects matching this format (no markdown formatting, no code blocks, no other text):
+            [
+                {{"parent_category": "Harry Potter Books", "sub_category_ids": [1, 2]}},
+                {{"parent_category": "Novels", "sub_category_ids": [1, 2, 3]}}
+            ]
+            
+            If no consolidation is needed, return: []
+        """
+        
+        from .llm_service import model
+        response = await asyncio.to_thread(
+            model.generate_content,
+            prompt,
+        )
+        import json
+        raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        if not raw_text or raw_text == "[]":
+            return
+            
+        consolidations = json.loads(raw_text)
+        for entry in consolidations:
+            parent_name = entry.get("parent_category")
+            sub_ids = entry.get("sub_category_ids", [])
+            if not parent_name or not sub_ids:
+                continue
+                
+            # Create or get parent category
+            parent_cat = db.query(models.Category).filter(
+                models.Category.name == parent_name,
+                models.Category.group_id == group_id
+            ).first()
+            if not parent_cat:
+                parent_cat = models.Category(name=parent_name, group_id=group_id)
+                db.add(parent_cat)
+                db.commit()
+                db.refresh(parent_cat)
+
+            # Associate all documents from sub-categories to this parent category
+            sub_categories = db.query(models.Category).filter(models.Category.id.in_(sub_ids)).all()
+            for sub_cat in sub_categories:
+                for doc in sub_cat.documents:
+                    if parent_cat not in doc.categories:
+                        doc.categories.append(parent_cat)
+            
+            db.commit()
+            
+            # Rewrite parent category summary
+            await update_categorical_summary(parent_name, group_id)
+
+    except Exception as e:
+        print("Failed to consolidate categories:", e)
     finally:
         db.close()
 
@@ -150,37 +269,51 @@ async def process_document_task(doc_id: int, filename: str) -> None:
             return
 
         # --- Dynamic Automated Categorization ---
-        resolved_category = doc.category
-        if not resolved_category or resolved_category == "general":
+        if not doc.categories:
+            summary_context_text = _extract_summary_text_from_pdf(doc.file_path)
+            meta_info = f"Filename: {doc.filename}\nFile Size: {doc.file_size or 0} bytes\n"
+            context_for_classification = meta_info + summary_context_text
+            
+            resolved_category_name = "general"
             # 1. Try vector-based matching against existing summaries
-            first_chunk_vector = _embed_query(chunks[0])
+            first_chunk_vector = _embed_query(summary_context_text[:1000] if summary_context_text else chunks[0])
             try:
-                matches = milvus_store.search_categories(first_chunk_vector, top_k=1)
+                matches = milvus_store.search_categories(first_chunk_vector, top_k=1, group_id=doc.group_id)
                 if matches and matches[0]["score"] >= 0.60:
-                    resolved_category = matches[0]["category_name"]
-                    print(f"Vector-matched category: {resolved_category} (score: {matches[0]['score']})")
+                    resolved_category_name = matches[0]["category_name"]
+                    print(f"Vector-matched category: {resolved_category_name} (score: {matches[0]['score']})")
             except Exception as e:
                 print("Milvus category search skipped/failed:", e)
 
             # 2. Fallback to LLM Classification
-            if not resolved_category or resolved_category == "general":
+            if resolved_category_name == "general":
                 try:
-                    # Get unique category names from PostgreSQL
-                    categories_objs = db.query(models.Document.category).distinct().all()
-                    existing_categories = [c[0] for c in categories_objs if c[0] and c[0] != "general"]
+                    # Get unique category names in this group from PostgreSQL
+                    categories_objs = db.query(models.Category).filter(models.Category.group_id == doc.group_id).all()
+                    existing_categories = [c.name for c in categories_objs if c.name != "general"]
                     
-                    # Call Gemini
                     from . import llm_service
-                    resolved_category = await llm_service.classify_ingested_document(
-                        text_sample=text[:4000],
+                    resolved_category_name = await llm_service.classify_ingested_document(
+                        text_sample=context_for_classification[:4000],
                         existing_categories=existing_categories
                     )
-                    print(f"LLM-classified category: {resolved_category}")
+                    print(f"LLM-classified category: {resolved_category_name}")
                 except Exception as e:
                     print("LLM classification failed, fallback to general:", e)
-                    resolved_category = "general"
+                    resolved_category_name = "general"
 
-            doc.category = resolved_category
+            # Create or get category in Postgres
+            db_category = db.query(models.Category).filter(
+                models.Category.name == resolved_category_name,
+                models.Category.group_id == doc.group_id
+            ).first()
+            if not db_category:
+                db_category = models.Category(name=resolved_category_name, group_id=doc.group_id)
+                db.add(db_category)
+                db.commit()
+                db.refresh(db_category)
+                
+            doc.categories.append(db_category)
             db.commit()
 
         embeddings = _embed_texts(chunks)
@@ -206,9 +339,13 @@ async def process_document_task(doc_id: int, filename: str) -> None:
             f"DOCUMENT {doc_id} FINISHED"
         )   
 
-        # Trigger summary update in the background
-        if resolved_category and resolved_category != "general":
-            asyncio.create_task(update_categorical_summary(resolved_category))
+        # Trigger summary update for all categories associated with this document
+        for cat in doc.categories:
+            await update_categorical_summary(cat.name, doc.group_id)
+
+        # Trigger dynamic parent category consolidation / merging
+        if doc.group_id is not None:
+            await consolidate_categories(doc.group_id)
 
     except Exception as exc:  # pragma: no cover - safety path for async task
         db.rollback()

@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 # Path setup (mirrors the monorepo sys.path injection in main.py)
 ROOT = Path(__file__).parent.parent.parent.parent  # CaRAG/
 sys.path.insert(0, str(ROOT / "live" / "backend"))
-sys.path.insert(0, str(ROOT / "backend"))
+sys.path.insert(0, str(ROOT / "core_backend"))
 
 FAKE_HITS = [
     {
@@ -86,8 +86,7 @@ def test_mode_c_falls_back_on_low_confidence():
     should_route = not (not high_conf_matches or high_conf_matches[0]["score"] < 0.35)
     assert should_route is True, "Score 0.85 should proceed to LLM routing"
     print("PASS - Mode C correctly distinguishes low vs high confidence routing")
-
-
+    
 # Runner
 if __name__ == "__main__":
     print("\n---- CaRAG Live API - Chat Routing Mode Tests ----\n")

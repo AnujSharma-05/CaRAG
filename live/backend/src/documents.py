@@ -65,12 +65,25 @@ async def upload_document(
         file_path=file_path,
         file_size=file_size,
         status="uploaded",
-        category=category or "general",
         group_id=group_id,         # <-- SCOPED to this group
     )
     db.add(new_doc)
     db.commit()
     db.refresh(new_doc)
+
+    # If category is explicitly provided, map it immediately
+    if category and category != "general":
+        db_category = db.query(models.Category).filter(
+            models.Category.name == category,
+            models.Category.group_id == group_id
+        ).first()
+        if not db_category:
+            db_category = models.Category(name=category, group_id=group_id)
+            db.add(db_category)
+            db.commit()
+            db.refresh(db_category)
+        new_doc.categories.append(db_category)
+        db.commit()
 
     # Kick off the original CaRAG engine's ingestion pipeline in the background
     background_tasks.add_task(services.process_document_task, new_doc.id, file.filename)
@@ -111,26 +124,32 @@ async def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found in this group.")
 
-    category_name = doc.category
+    # Keep track of categories associated with this document before deletion
+    doc_categories = [cat for cat in doc.categories]
 
     # Step 1: Wipe disk file + Milvus vectors via the engine's utility
     await services.delete_document_assets(document_id=doc.id, file_path=doc.file_path)
 
-    # Step 2: Remove from Postgres (cascades to document_chunks)
+    # Step 2: Remove from Postgres (cascades to document_chunks and document_categories relation)
     db.delete(doc)
     db.commit()
 
-    # Step 3: Refresh or remove category summary in Milvus
-    if category_name and category_name != "general":
-        other_docs_in_category = db.query(models.Document).filter(
+    # Step 3: Refresh or remove category summaries in Milvus
+    for cat in doc_categories:
+        # Check if other documents exist in this category and group
+        other_docs_in_category = db.query(models.Document).join(models.Document.categories).filter(
             models.Document.group_id == group_id,
-            models.Document.category == category_name,
-            models.Document.status == "ready",
+            models.Category.id == cat.id,
+            models.Document.status == "ready"
         ).first()
+        
         if not other_docs_in_category:
-            milvus_store.delete_category_summary(category_name)
+            milvus_store.delete_category_summary(cat.name, group_id)
+            # Clean up empty category row from database
+            db.delete(cat)
+            db.commit()
         else:
-            asyncio.create_task(services.update_categorical_summary(category_name))
+            asyncio.create_task(services.update_categorical_summary(cat.name, group_id))
 
     return {"message": "Document deleted.", "id": doc_id}
 
@@ -148,16 +167,15 @@ async def list_group_categories(
     _assert_membership(db, group_id, current_user.id)
 
     rows = (
-        db.query(models.Document.category)
+        db.query(models.Category.name)
         .filter(
-            models.Document.group_id == group_id,
-            models.Document.status == "ready",
-            models.Document.category.isnot(None),
+            models.Category.group_id == group_id,
+            models.Category.name != "general"
         )
         .distinct()
         .all()
     )
 
-    # Filter out "general" — it's a fallback, not a meaningful user-facing category
-    categories = sorted([r.category for r in rows if r.category and r.category != "general"])
+    # Return list of category names
+    categories = sorted([r[0] for r in rows if r[0]])
     return {"group_id": group_id, "categories": categories}

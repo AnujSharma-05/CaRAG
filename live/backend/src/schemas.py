@@ -54,7 +54,7 @@ class DocumentBase(BaseModel):
     filename: str
     status: str
     file_size: int | None = None
-    category: str | None = None
+    categories: List[str] = []
 
 class DocumentResponse(DocumentBase):
     id: int
@@ -62,6 +62,14 @@ class DocumentResponse(DocumentBase):
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        # Flatten the categories relationship to a list of strings
+        validated = super().model_validate(obj, **kwargs)
+        if hasattr(obj, 'categories'):
+            validated.categories = [c.name for c in obj.categories]
+        return validated
 
 class DocumentStatusUpdate(BaseModel):
     status: str
