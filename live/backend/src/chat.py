@@ -181,7 +181,7 @@ async def group_chat(
         )
 
         # LLM Call #2 — the actual answer generation
-        answer = await generate_answer(question=payload.question, context=context)
+        answer = await generate_answer(question=payload.question, context=context, bypass_llm=payload.bypass_llm)
 
         return schemas.ChatResponse(answer=answer, citations=citations)
 

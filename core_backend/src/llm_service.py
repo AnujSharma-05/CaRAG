@@ -16,6 +16,7 @@ model = genai.GenerativeModel(
 async def generate_answer(
     question: str,
     context: str,
+    bypass_llm: bool = False,
 ) -> str:
 
     prompt = f"""
@@ -38,6 +39,9 @@ async def generate_answer(
     """
 
     try:
+        import os
+        if bypass_llm or os.getenv("MOCK_LLM", "false").lower() == "true":
+            raise Exception("429 Mock Mode Voluntary Trigger")
         response = await asyncio.to_thread(
             model.generate_content,
             prompt,
@@ -74,6 +78,7 @@ async def generate_answer(
 async def generate_answer_stream(
     question: str,
     context: str,
+    bypass_llm: bool = False,
 ):
     prompt = f"""
         You are a RAG-based document assistant.
@@ -95,6 +100,9 @@ async def generate_answer_stream(
     """
 
     try:
+        import os
+        if bypass_llm or os.getenv("MOCK_LLM", "false").lower() == "true":
+            raise Exception("429 Mock Mode Voluntary Trigger")
         # stream=True enables token-by-token generation
         response = await asyncio.to_thread(
             model.generate_content,
@@ -156,6 +164,9 @@ async def classify_ingested_document(text_sample: str, existing_categories: list
     """
     
     try:
+        import os
+        if os.getenv("MOCK_LLM", "false").lower() == "true":
+            raise Exception("429 Mock Mode Voluntary Trigger")
         response = await asyncio.to_thread(
             model.generate_content,
             prompt,
@@ -201,6 +212,9 @@ async def classify_query_category(question: str, category_candidates: list[dict[
     """
     
     try:
+        import os
+        if os.getenv("MOCK_LLM", "false").lower() == "true":
+            raise Exception("429 Mock Mode Voluntary Trigger")
         response = await asyncio.to_thread(
             model.generate_content,
             prompt,

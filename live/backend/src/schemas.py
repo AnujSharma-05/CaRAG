@@ -84,6 +84,7 @@ class ChatRequest(BaseModel):
     # Optional manual overrides — if set, bypass automatic 2-stage routing
     category: str | None = None      # Mode B: pin to a specific category
     document_id: int | None = None   # Mode A: pin to a specific document
+    bypass_llm: bool = False
 
 class Citation(BaseModel):
     document_id: int

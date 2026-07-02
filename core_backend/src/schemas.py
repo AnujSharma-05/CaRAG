@@ -46,6 +46,7 @@ class ChatRequest(BaseModel):
     document_id: int | None = None
     category: str | None = None
     top_k: int = 5
+    bypass_llm: bool = False
 
 
 class ChatCitation(BaseModel):

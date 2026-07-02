@@ -199,6 +199,7 @@ async def chat(payload: schemas.ChatRequest):
             document_id=payload.document_id,
             category=payload.category,
             top_k=payload.top_k,
+            bypass_llm=payload.bypass_llm,
         )
     except Exception as exc:
         import traceback

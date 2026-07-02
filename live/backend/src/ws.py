@@ -83,6 +83,7 @@ async def websocket_endpoint(
                             top_k = 5
                         document_id = message.get("document_id")
                         category = message.get("category")
+                        bypass_llm = bool(message.get("bypass_llm", False))
 
                         if document_id is not None:
                             doc = db_session.query(models.Document).filter(
@@ -157,7 +158,7 @@ async def websocket_endpoint(
                         context = "\n\n".join(f"[Source {i + 1}] {hit['content']}" for i, hit in enumerate(hits))
 
                         # Stream the answer
-                        async for chunk_text in generate_answer_stream(question, context):
+                        async for chunk_text in generate_answer_stream(question, context, bypass_llm=bypass_llm):
                             await websocket.send_text(json.dumps({"event": "chunk", "text": chunk_text}))
                         
                         await websocket.send_text(json.dumps({"event": "done", "citations": citations}))

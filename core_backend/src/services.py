@@ -388,7 +388,7 @@ async def process_document_task(doc_id: int, filename: str) -> None:
         db.close()
 
 
-async def answer_question(question: str, document_id: int | None = None, category: str | None = None, top_k: int = 5) -> dict[str, Any]:
+async def answer_question(question: str, document_id: int | None = None, category: str | None = None, top_k: int = 5, bypass_llm: bool = False) -> dict[str, Any]:
     """Retrieve relevant chunks from Milvus and build a grounded response payload using hierarchical clustering."""
     db: Session = sessionLocal()
     try:
@@ -522,6 +522,7 @@ async def answer_question(question: str, document_id: int | None = None, categor
     answer = await generate_answer(
         question=question,
         context=context,
+        bypass_llm=bypass_llm,
     )
 
     return {
