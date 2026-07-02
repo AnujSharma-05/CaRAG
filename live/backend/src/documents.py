@@ -85,8 +85,43 @@ async def upload_document(
         new_doc.categories.append(db_category)
         db.commit()
 
-    # Kick off the original CaRAG engine's ingestion pipeline in the background
-    background_tasks.add_task(services.process_document_task, new_doc.id, file.filename)
+    # Kick off the original CaRAG engine's ingestion pipeline in the background with WS events
+    async def process_document_task_with_ws(doc_id: int, filename: str, group_id: int):
+        from .ws_manager import manager
+        from .database import sessionLocal
+        
+        await manager.broadcast_to_group(group_id, {
+            "event": "doc_processing",
+            "doc_id": doc_id,
+            "filename": filename
+        })
+        
+        # Run the synchronous CPU-bound task in a thread
+        await asyncio.to_thread(services.process_document_task, doc_id, filename)
+        
+        # Fetch the updated doc status
+        db_session = sessionLocal()
+        try:
+            doc = db_session.query(models.Document).filter(models.Document.id == doc_id).first()
+            if doc:
+                if doc.status == "ready":
+                    categories = [cat.name for cat in doc.categories]
+                    await manager.broadcast_to_group(group_id, {
+                        "event": "doc_ready",
+                        "doc_id": doc_id,
+                        "filename": filename,
+                        "categories": categories
+                    })
+                else:
+                    await manager.broadcast_to_group(group_id, {
+                        "event": "doc_failed",
+                        "doc_id": doc_id,
+                        "filename": filename
+                    })
+        finally:
+            db_session.close()
+
+    background_tasks.add_task(process_document_task_with_ws, new_doc.id, file.filename, group_id)
     return new_doc
 
 

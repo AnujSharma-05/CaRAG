@@ -71,23 +71,88 @@ async def generate_answer(
         raise exc
 
 
+async def generate_answer_stream(
+    question: str,
+    context: str,
+):
+    prompt = f"""
+        You are a RAG-based document assistant.
+
+        You MUST follow these rules:
+
+        1. Answer ONLY from the provided context.
+        2. Do NOT invent information.
+        3. If the answer is not found in the context, say:
+        "The provided document does not contain enough information to answer this question."
+        4. Keep answers concise and factual.
+        5. Use bullet points when appropriate.
+
+        QUESTION:
+        {question}
+
+        CONTEXT:
+        {context}
+    """
+
+    try:
+        # stream=True enables token-by-token generation
+        response = await asyncio.to_thread(
+            model.generate_content,
+            prompt,
+            stream=True,
+        )
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
+    except Exception as exc:
+        err_msg = str(exc)
+        if "429" in err_msg or "quota" in err_msg.lower() or "limit" in err_msg.lower() or "exhausted" in err_msg.lower():
+            yield "⚠️ **[Mock Mode - Gemini API Quota Exceeded]**\n\n"
+            yield "We successfully retrieved the most relevant context chunks from Milvus, but Gemini is rate-limited. "
+            yield "Here are the top matches found in your document database:\n\n"
+            
+            lines = [line.strip() for line in context.split("\n") if line.strip()]
+            clean_lines = []
+            for line in lines:
+                if line.startswith("[Source"):
+                    clean_lines.append(line)
+                elif clean_lines:
+                    clean_lines[-1] += " " + line
+                else:
+                    clean_lines.append(line)
+            
+            summary_points = []
+            for item in clean_lines[:3]:
+                preview = item.replace("[Source", "Source").strip()
+                summary_points.append(f"• {preview[:150]}...")
+            
+            points_str = "\n".join(summary_points)
+            yield points_str
+        else:
+            raise exc
+
+
 async def classify_ingested_document(text_sample: str, existing_categories: list[str]) -> str:
     """Classify an uploaded document into an existing category or create a new specific category."""
     categories_str = ", ".join(f"'{c}'" for c in existing_categories) if existing_categories else "None"
     
     prompt = f"""
-        You are an intelligent document classification system.
-        Your job is to analyze the text sample of a new document and assign it to the most relevant category.
+        [SYSTEM: ADVANCED TAXONOMY AGENT]
+        You are an elite document classification and taxonomy engine. Your objective is to analyze a sample from a newly uploaded document and classify it with absolute precision into the most appropriate structural category.
 
-        Active categories in the database: [{categories_str}]
+        CURRENT TAXONOMY: [{categories_str}]
 
-        Rules:
-        1. If the document fits one of the existing categories, respond with that category name exactly.
-        2. If the document does not fit any existing category, propose a new, specific, and concise category name (e.g., "Lord of the Rings", "Deep Learning", "Company Policies"). Do not create redundant or overly broad categories (like "PDF", "Document", "Book").
-        3. Respond ONLY with the category name string (no quotes, no preamble, no markdown formatting).
+        CLASSIFICATION PROTOCOL:
+        1. PRECISION MATCHING: If the document's core subject matter strictly aligns with an existing category from the CURRENT TAXONOMY, return that exact category name.
+        2. NOVEL TAXONOMY CREATION: If no existing category represents the document's unique subject, generate a new, highly specific, and elegant category name. 
+           - Good Examples: "Quantum Physics Research", "Employee Onboarding Materials", "The Lord of the Rings Series".
+           - Bad Examples (DO NOT DO THIS): "PDF File", "General Document", "Miscellaneous Book", "Information".
+        3. GRANULARITY: Aim for a specific 'leaf-node' level of detail. Parent-level consolidation happens in a separate pipeline.
+        4. STRICT OUTPUT: Return exactly ONE category name string. Absolutely no quotes, preamble, or markdown formatting. Your entire output must be just the name itself.
 
-        TEXT SAMPLE FROM DOCUMENT:
-        {text_sample[:3000]}
+        --- DOCUMENT SAMPLE START ---
+        {text_sample[:4000]}
+        --- DOCUMENT SAMPLE END ---
     """
     
     try:
@@ -120,18 +185,19 @@ async def classify_query_category(question: str, category_candidates: list[dict[
     )
     
     prompt = f"""
-        You are a search query router.
-        Your job is to map a user question to the most relevant document category based on the summaries of candidate categories.
-
-        CANDIDATE CATEGORIES AND SUMMARIES:
+        [SYSTEM: RAG QUERY ROUTING ENGINE]
+        You are an expert retrieval-augmented generation (RAG) router. Your task is to analyze a user's prompt and determine the optimal knowledge category to search against, maximizing retrieval accuracy.
+        
+        AVAILABLE KNOWLEDGE DOMAINS:
         {candidates_str}
-
-        Rules:
-        1. Respond with the exact name of the most matching category.
-        2. Respond ONLY with the category name (no quotes, no preamble, no explanation).
-
-        USER QUESTION:
-        {question}
+        
+        USER QUERY: "{question}"
+        
+        ROUTING PROTOCOL:
+        1. SEMANTIC ALIGNMENT: Evaluate the user query against the provided summaries. Select the category whose summary best encompasses the concepts, entities, or intent of the user query.
+        2. EXACT MATCH REQUIREMENT: You must output the exact, verbatim 'Category Name' string as it appears in the AVAILABLE KNOWLEDGE DOMAINS list.
+        3. FALLBACK: If the query is entirely conversational or completely outside all available domains, respond with "general".
+        4. STRICT OUTPUT: Respond ONLY with the category name. No quotes, no markdown, no explanations.
     """
     
     try:

@@ -24,12 +24,17 @@ from . import auth, groups, documents, chat, ws
 # Create all tables (Users, Groups, etc.)
 Base.metadata.create_all(bind=engine)
 
+from .ws_manager import manager
+import asyncio
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize the Milvus connection using the engine's init logic
     print("Initializing CaRAG Engine...")
+    heartbeat_task = asyncio.create_task(manager.heartbeat_loop())
     yield
     # Shutdown logic would go here
+    heartbeat_task.cancel()
     print("Shutting down Live API...")
 
 app = FastAPI(title="CaRAG Live API", version="2.0", lifespan=lifespan)

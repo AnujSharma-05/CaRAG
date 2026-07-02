@@ -79,17 +79,37 @@ async def upload_pdf(
         filename=file.filename,
         file_path=file_path,
         file_size=file_size,
-        status="uploaded",
-        category=category or "general",
+        status="uploaded"
     )
 
     db.add(new_doc)
     db.commit()
     db.refresh(new_doc)
 
+    # Now associate the category
+    cat_name = category or "general"
+    db_category = db.query(models.Category).filter(
+        models.Category.name == cat_name,
+        models.Category.group_id == None
+    ).first()
+    if not db_category:
+        db_category = models.Category(name=cat_name, group_id=None)
+        db.add(db_category)
+        db.commit()
+        db.refresh(db_category)
+    new_doc.categories.append(db_category)
+    db.commit()
+
     # Trigger ingestion in background; task creates its own DB session.
     background_tasks.add_task(services.process_document_task, new_doc.id, file.filename)
-    return new_doc
+    
+    return {
+        "id": new_doc.id,
+        "filename": new_doc.filename,
+        "status": new_doc.status,
+        "file_size": new_doc.file_size,
+        "category": cat_name
+    }
 
 #----get all documents----
 
@@ -105,7 +125,7 @@ async def get_documents(
             "filename": doc.filename,
             "status": doc.status,
             "file_size": doc.file_size if getattr(doc, "file_size", None) is not None else (os.path.getsize(doc.file_path) if doc.file_path and os.path.exists(doc.file_path) else 0), #Explaination of this line: This line is checking if the file_size attribute exists on the doc object and is not None. If it does exist and is not None, it uses that value. If it does not exist or is None, it checks if the file_path attribute exists and if the file at that path exists. If both conditions are true, it gets the size of the file using os.path.getsize(doc.file_path). If either condition is false, it defaults to 0. This ensures that we have a valid file size value even if the file_size attribute is missing or None, or if the file itself is missing.
-            "category": doc.category,
+            "category": ", ".join([c.name for c in doc.categories]) if doc.categories else "general",
         }
         for doc in docs
     ]
@@ -124,7 +144,7 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
         "filename": doc.filename,
         "status": doc.status,
         "file_size": doc.file_size if doc.file_size is not None else (os.path.getsize(doc.file_path) if doc.file_path and os.path.exists(doc.file_path) else 0),
-        "category": doc.category,
+        "category": ", ".join([c.name for c in doc.categories]) if doc.categories else "general",
     }
 
 
@@ -143,7 +163,7 @@ async def update_document_status(document_id: int, payload: schemas.DocumentStat
         "filename": doc.filename,
         "status": doc.status,
         "file_size": doc.file_size if doc.file_size is not None else (os.path.getsize(doc.file_path) if doc.file_path and os.path.exists(doc.file_path) else 0),
-        "category": doc.category,
+        "category": doc.categories[0].name if doc.categories else "general",
     }
 
 
@@ -153,14 +173,14 @@ async def delete_document(document_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    category_name = doc.category
+    category_name = doc.categories[0].name if doc.categories else "general"
     await services.delete_document_assets(document_id=doc.id, file_path=doc.file_path)
     db.delete(doc)
     db.commit()
 
     if category_name and category_name != "general":
-        other_docs_exist = db.query(models.Document).filter(
-            models.Document.category == category_name,
+        other_docs_exist = db.query(models.Document).join(models.Document.categories).filter(
+            models.Category.name == category_name,
             models.Document.status == "ready"
         ).first()
         if not other_docs_exist:

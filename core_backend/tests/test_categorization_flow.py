@@ -38,12 +38,22 @@ async def run_end_to_end_test():
             file_path=test_pdf,
             file_size=file_size,
             status="uploaded",
-            category="general" # Set to general to trigger auto categorization
         )
         db.add(test_doc)
         db.commit()
         db.refresh(test_doc)
-        print(f"Registered document in DB: ID={test_doc.id}, Category={test_doc.category}")
+        
+        # Associate with general category
+        db_category = db.query(models.Category).filter(models.Category.name == "general").first()
+        if not db_category:
+            db_category = models.Category(name="general", group_id=None)
+            db.add(db_category)
+            db.commit()
+            db.refresh(db_category)
+        test_doc.categories.append(db_category)
+        db.commit()
+        
+        print(f"Registered document in DB: ID={test_doc.id}, Category={test_doc.categories[0].name if test_doc.categories else 'general'}")
 
         # Step 3: Run the ingestion pipeline (process_document_task)
         print("\n[Step 3] Running process_document_task...")
@@ -52,7 +62,7 @@ async def run_end_to_end_test():
 
         # Refresh from database to see changes
         db.refresh(test_doc)
-        resolved_category = test_doc.category
+        resolved_category = test_doc.categories[0].name if test_doc.categories else "general"
         print(f"Document ingestion complete.")
         print(f"Auto-Categorized Category: '{resolved_category}'")
         print(f"Ingestion Status: '{test_doc.status}'")
@@ -79,7 +89,7 @@ async def run_end_to_end_test():
         # Step 5: Clean up document and assets
         print("\n[Step 5] Cleaning up document and testing categorical description update...")
         # Keep track of category name
-        category_name = test_doc.category
+        category_name = test_doc.categories[0].name if test_doc.categories else "general"
 
         # Delete document from DB
         await services.delete_document_assets(document_id=test_doc.id, file_path=None) # Pass None to keep the physical file on disk
@@ -88,8 +98,8 @@ async def run_end_to_end_test():
         print("Deleted document record from DB and vector chunks from Milvus.")
 
         # Trigger update/deletion of summary
-        other_docs_exist = db.query(models.Document).filter(
-            models.Document.category == category_name,
+        other_docs_exist = db.query(models.Document).join(models.Document.categories).filter(
+            models.Category.name == category_name,
             models.Document.status == "ready"
         ).first()
 

@@ -15,6 +15,7 @@ from .llm_service import generate_answer
 from .config import (
     CHUNK_SIZE,
     CHUNK_OVERLAP,
+    DATABASE_URL,
 )
 from sqlalchemy import text
 
@@ -179,24 +180,27 @@ async def consolidate_categories(group_id: int | None) -> None:
 
         # Prompt Gemini to identify relationships and recommend consolidation/grouping
         prompt = f"""
-            You are an expert taxonomy and knowledge organization agent.
-            Analyze the following active document categories and summaries in this user's workspace:
+            [SYSTEM: TAXONOMY ARCHITECT]
+            You are an advanced ontology and taxonomy mapping agent. Your purpose is to analyze a flat list of active document categories in a user's workspace and design an elegant, hierarchical knowledge graph by identifying logical parent-child relationships.
             
+            FLAT CATEGORIES LIST:
             {candidates}
             
-            Determine if any of these categories can be grouped under broader, general parent categories (e.g. "Novels", "Research Papers", "User Manuals", "Company Policies", "Harry Potter Books").
+            CONSOLIDATION PROTOCOL:
+            1. HIERARCHY DETECTION: Identify sub-categories that naturally fall under broader, organizing "Parent Categories".
+            2. PARENT NAMING: Synthesize clean, professional, and universally understood parent category names (e.g. "Science Fiction Novels", "HR Policies", "Machine Learning Publications", "Harry Potter Series").
+            3. MULTIPLE INHERITANCE: A single sub-category CAN and SHOULD map to multiple parent categories if logically sound (e.g., "The Sorcerer's Stone" maps to both "Harry Potter Series" and "Fantasy Novels").
+            4. ACTIONABLE OUTPUT ONLY: You must respond strictly with a valid JSON array of relationships. 
             
-            Rules:
-            1. Suggest group pairings where sub-categories belong to a parent category.
-            2. Suggest parent categories that are clean, concise, and meaningful (e.g., if there are multiple parts of "Harry Potter", they belong to "Harry Potter Books" AND "Novels").
-            3. Each sub-category can map to MULTIPLE parent categories (e.g. "Sorcerer's Stone" belongs under "Harry Potter Books" and "Novels").
-            4. Respond ONLY with a JSON list of objects matching this format (no markdown formatting, no code blocks, no other text):
+            JSON SCHEMA:
             [
-                {{"parent_category": "Harry Potter Books", "sub_category_ids": [1, 2]}},
-                {{"parent_category": "Novels", "sub_category_ids": [1, 2, 3]}}
+                {{"parent_category": "Name of Broad Parent", "sub_category_ids": [id_1, id_2]}},
+                {{"parent_category": "Another Parent", "sub_category_ids": [id_1, id_2, id_3]}}
             ]
             
-            If no consolidation is needed, return: []
+            If the current categories are entirely disjoint and no grouping is logically possible, return an empty array: []
+            
+            Do NOT wrap your response in markdown code blocks. Output raw JSON only.
         """
         
         from .llm_service import model
@@ -205,7 +209,15 @@ async def consolidate_categories(group_id: int | None) -> None:
             prompt,
         )
         import json
-        raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        import re
+        raw_text = response.text.strip()
+        # Find JSON array boundaries to prevent errors if the LLM includes preamble or postamble
+        match = re.search(r'\[.*\]', raw_text, re.DOTALL)
+        if match:
+            raw_text = match.group(0)
+        else:
+            raw_text = "[]"
+            
         if not raw_text or raw_text == "[]":
             return
             
@@ -269,7 +281,8 @@ async def process_document_task(doc_id: int, filename: str) -> None:
             return
 
         # --- Dynamic Automated Categorization ---
-        if not doc.categories:
+        is_general_only = len(doc.categories) == 1 and doc.categories[0].name == "general"
+        if not doc.categories or is_general_only:
             summary_context_text = _extract_summary_text_from_pdf(doc.file_path)
             meta_info = f"Filename: {doc.filename}\nFile Size: {doc.file_size or 0} bytes\n"
             context_for_classification = meta_info + summary_context_text
@@ -284,7 +297,7 @@ async def process_document_task(doc_id: int, filename: str) -> None:
                     print(f"Vector-matched category: {resolved_category_name} (score: {matches[0]['score']})")
             except Exception as e:
                 print("Milvus category search skipped/failed:", e)
-
+ 
             # 2. Fallback to LLM Classification
             if resolved_category_name == "general":
                 try:
@@ -301,7 +314,7 @@ async def process_document_task(doc_id: int, filename: str) -> None:
                 except Exception as e:
                     print("LLM classification failed, fallback to general:", e)
                     resolved_category_name = "general"
-
+ 
             # Create or get category in Postgres
             db_category = db.query(models.Category).filter(
                 models.Category.name == resolved_category_name,
@@ -313,7 +326,17 @@ async def process_document_task(doc_id: int, filename: str) -> None:
                 db.commit()
                 db.refresh(db_category)
                 
-            doc.categories.append(db_category)
+            # If we resolved a category different from "general", clear the "general" placeholder
+            if is_general_only and resolved_category_name != "general":
+                general_cat = db.query(models.Category).filter(
+                    models.Category.name == "general",
+                    models.Category.group_id == doc.group_id
+                ).first()
+                if general_cat in doc.categories:
+                    doc.categories.remove(general_cat)
+            
+            if db_category not in doc.categories:
+                doc.categories.append(db_category)
             db.commit()
 
         embeddings = _embed_texts(chunks)
@@ -344,8 +367,7 @@ async def process_document_task(doc_id: int, filename: str) -> None:
             await update_categorical_summary(cat.name, doc.group_id)
 
         # Trigger dynamic parent category consolidation / merging
-        if doc.group_id is not None:
-            await consolidate_categories(doc.group_id)
+        await consolidate_categories(doc.group_id)
 
     except Exception as exc:  # pragma: no cover - safety path for async task
         db.rollback()
@@ -394,8 +416,8 @@ async def answer_question(question: str, document_id: int | None = None, categor
 
         # 2. Bypass check - Specific Category Filter
         elif category is not None:
-            doc_ids_query = db.query(models.Document.id).filter(
-                models.Document.category == category,
+            doc_ids_query = db.query(models.Document.id).join(models.Document.categories).filter(
+                models.Category.name == category,
                 models.Document.status == "ready"
             ).all()
             doc_ids = [r[0] for r in doc_ids_query]
@@ -437,8 +459,8 @@ async def answer_question(question: str, document_id: int | None = None, categor
                     chosen_category = matches[0]["category_name"]
 
                 # Stage 2: Main Search (Relational Filter)
-                doc_ids_query = db.query(models.Document.id).filter(
-                    models.Document.category == chosen_category,
+                doc_ids_query = db.query(models.Document.id).join(models.Document.categories).filter(
+                    models.Category.name == chosen_category,
                     models.Document.status == "ready"
                 ).all()
                 doc_ids = [r[0] for r in doc_ids_query]
@@ -530,32 +552,24 @@ async def reset_system() -> None:
         print("STEP 2")
 
         milvus_store.delete_all_chunks()
-        print("BEFORE TRUNCATE")
-
-        db.execute(
-            text(
-                """
-                TRUNCATE TABLE
-                    document_chunks,
-                    documents
-                RESTART IDENTITY
-                CASCADE
-                """
-            )
-        )
+        db.query(models.DocumentCategory).delete()
+        db.query(models.DocumentChunk).delete()
+        db.query(models.Document).delete()
+        db.query(models.Category).delete()
+        db.commit()
 
         print("AFTER TRUNCATE")
-        db.commit()
-        result = db.execute(
-            text(
-                "SELECT nextval('documents_id_seq')"
-            )
-        )
 
-        print(
-            "NEXTVAL AFTER RESET =",
-            result.scalar()
-        )
+        if "postgresql" in DATABASE_URL:
+            db.execute(text("ALTER SEQUENCE documents_id_seq RESTART WITH 1"))
+            db.execute(text("ALTER SEQUENCE document_chunks_id_seq RESTART WITH 1"))
+            db.execute(text("ALTER SEQUENCE categories_id_seq RESTART WITH 1"))
+            db.commit()
+            
+            result = db.execute(text("SELECT nextval('documents_id_seq')"))
+            print("NEXTVAL AFTER RESET =", result.scalar())
+        else:
+            print("SQLite - Sequences auto-reset on empty tables.")
     finally:
 
         print("STEP 7")
