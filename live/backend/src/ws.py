@@ -77,7 +77,10 @@ async def websocket_endpoint(
                         
                         query_vector = _embed_query(question)
                         hits = []
-                        top_k = message.get("top_k", 5)
+                        try:
+                            top_k = max(1, min(int(message.get("top_k", 5)), 100))
+                        except (ValueError, TypeError):
+                            top_k = 5
                         document_id = message.get("document_id")
                         category = message.get("category")
 

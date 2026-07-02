@@ -421,7 +421,7 @@ async def answer_question(question: str, document_id: int | None = None, categor
                     "answer": f"The selected document is not ready yet (current status: {doc.status}).",
                     "citations": []
                 }
-            hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 10)), document_id=document_id)
+            hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)), document_id=document_id)
 
         # 2. Bypass check - Specific Category Filter
         elif category is not None:
@@ -431,7 +431,7 @@ async def answer_question(question: str, document_id: int | None = None, categor
             ).all()
             doc_ids = [r[0] for r in doc_ids_query]
             if doc_ids:
-                hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 10)), document_ids=doc_ids)
+                hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)), document_ids=doc_ids)
             else:
                 hits = []
 
@@ -447,7 +447,7 @@ async def answer_question(question: str, document_id: int | None = None, categor
             # Confidence-Score Fallback (or if no category summaries exist)
             if not matches or matches[0]["score"] < 0.35:
                 print(f"Bypassing categorical routing (Top score: {matches[0]['score'] if matches else 'None'} < 0.35). Global search initiated.")
-                hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 10)))
+                hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)))
             else:
                 # LLM Routing (LLM Call 1)
                 from . import llm_service
@@ -474,11 +474,11 @@ async def answer_question(question: str, document_id: int | None = None, categor
                 ).all()
                 doc_ids = [r[0] for r in doc_ids_query]
                 if doc_ids:
-                    hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 10)), document_ids=doc_ids)
+                    hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)), document_ids=doc_ids)
                 else:
                     # In case documents in chosen category are not found/ready, fallback to global
                     print(f"No documents ready in category '{chosen_category}'. Bypassing category filter.")
-                    hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 10)))
+                    hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)))
 
     finally:
         db.close()

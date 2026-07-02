@@ -79,7 +79,7 @@ async def group_chat(
                 )
             hits = milvus_store.search(
                 query_embedding=query_vector,
-                top_k=max(1, min(payload.top_k, 10)),
+                top_k=max(1, min(payload.top_k, 100)),
                 document_id=payload.document_id,  # single-doc Milvus filter
             )
 
@@ -104,7 +104,7 @@ async def group_chat(
                 )
             hits = milvus_store.search(
                 query_embedding=query_vector,
-                top_k=max(1, min(payload.top_k, 10)),
+                top_k=max(1, min(payload.top_k, 100)),
                 document_ids=category_doc_ids,
             )
 
@@ -122,7 +122,7 @@ async def group_chat(
                 print(f"Low category confidence. Running flat search across group {group_id}.")
                 hits = milvus_store.search(
                     query_embedding=query_vector,
-                    top_k=max(1, min(payload.top_k, 10)),
+                    top_k=max(1, min(payload.top_k, 100)),
                     document_ids=group_doc_ids,
                 )
             else:
@@ -155,7 +155,7 @@ async def group_chat(
                 ]
                 hits = milvus_store.search(
                     query_embedding=query_vector,
-                    top_k=max(1, min(payload.top_k, 10)),
+                    top_k=max(1, min(payload.top_k, 100)),
                     document_ids=scoped_ids if scoped_ids else group_doc_ids,
                 )
 
