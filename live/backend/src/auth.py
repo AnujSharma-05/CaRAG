@@ -10,7 +10,6 @@ from .database import get_db
 
 # 1. Create the router (this acts like a mini FastAPI app)
 router = APIRouter(
-    prefix="/auth",
     tags=["Authentication"] # Groups these neatly in Swagger UI
 )
 

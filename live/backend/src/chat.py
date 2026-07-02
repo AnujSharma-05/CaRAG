@@ -89,9 +89,11 @@ async def group_chat(
         elif payload.category is not None:
             category_doc_ids = [
                 row.id
-                for row in db.query(models.Document.id).filter(
+                for row in db.query(models.Document.id)
+                .join(models.Document.categories)
+                .filter(
                     models.Document.group_id == group_id,
-                    models.Document.category == payload.category,
+                    models.Category.name == payload.category,
                     models.Document.status == "ready",
                 ).all()
             ]
@@ -111,7 +113,7 @@ async def group_chat(
         else:
             # STEP 2: Search Milvus category summary collection
             try:
-                category_matches = milvus_store.search_categories(query_vector, top_k=5)
+                category_matches = milvus_store.search_categories(query_vector, top_k=5, group_id=group_id)
             except Exception:
                 category_matches = []
 
@@ -143,9 +145,11 @@ async def group_chat(
                 # STEP 5: Intersection of group + category filters
                 scoped_ids = [
                     row.id
-                    for row in db.query(models.Document.id).filter(
+                    for row in db.query(models.Document.id)
+                    .join(models.Document.categories)
+                    .filter(
                         models.Document.group_id == group_id,
-                        models.Document.category == chosen_category,
+                        models.Category.name == chosen_category,
                         models.Document.status == "ready",
                     ).all()
                 ]

@@ -66,6 +66,7 @@ class MilvusStore:
             # Custom Scalar Fields for categorical summaries
             schema.add_field(field_name="category_name", datatype=DataType.VARCHAR, max_length=255)
             schema.add_field(field_name="summary", datatype=DataType.VARCHAR, max_length=65535)
+            schema.add_field(field_name="group_id", datatype=DataType.INT64, nullable=True)
         
         client.create_collection(
             collection_name=collection_name,
@@ -172,23 +173,30 @@ class MilvusStore:
         client = self._get_client()
         client.delete(collection_name=self.collection_name, filter=f"document_id == {document_id}")
 
-    def delete_category_summary(self, category_name: str) -> None:
+    def delete_category_summary(self, category_name: str, group_id: int | None = None) -> None:
         self.ensure_collection()
         client = self._get_client()
+        filter_str = f"category_name == '{category_name}'"
+        if group_id is not None:
+            filter_str += f" and group_id == {group_id}"
         client.delete(
             collection_name=self.category_collection_name,
-            filter=f"category_name == '{category_name}'"
+            filter=filter_str
         )
-        print(f"DELETED SUMMARY FOR CATEGORY: {category_name}")
+        print(f"DELETED SUMMARY FOR CATEGORY: {category_name} (Group: {group_id})")
 
-    def upsert_category_summary(self, category_name: str, summary: str, embedding: list[float]) -> None:
+    def upsert_category_summary(self, category_name: str, summary: str, embedding: list[float], group_id: int | None = None) -> None:
         self.ensure_collection()
         client = self._get_client()
 
-        # Clean existing summaries for this category
+        # Clean existing summaries for this category and group
+        filter_str = f"category_name == '{category_name}'"
+        if group_id is not None:
+            filter_str += f" and group_id == {group_id}"
+        
         client.delete(
             collection_name=self.category_collection_name,
-            filter=f"category_name == '{category_name}'"
+            filter=filter_str
         )
 
         base_id = time.time_ns()
@@ -197,22 +205,27 @@ class MilvusStore:
                 "id": int(base_id),
                 "vector": embedding,
                 "category_name": category_name,
-                "summary": summary
+                "summary": summary,
+                "group_id": group_id if group_id is not None else 0
             }
         ]
         client.insert(collection_name=self.category_collection_name, data=data)
         client.flush(collection_name=self.category_collection_name)
-        print(f"UPSERTED SUMMARY FOR CATEGORY: {category_name}")
+        print(f"UPSERTED SUMMARY FOR CATEGORY: {category_name} (Group: {group_id})")
 
-    def search_categories(self, query_embedding: list[float], top_k: int = 5) -> list[dict[str, Any]]:
+    def search_categories(self, query_embedding: list[float], top_k: int = 5, group_id: int | None = None) -> list[dict[str, Any]]:
         self.ensure_collection()
         client = self._get_client()
         search_kwargs: dict[str, Any] = {
             "collection_name": self.category_collection_name,
             "data": [query_embedding],
             "limit": top_k,
-            "output_fields": ["category_name", "summary"],
+            "output_fields": ["category_name", "summary", "group_id"],
         }
+        
+        if group_id is not None:
+            search_kwargs["filter"] = f"group_id == {group_id}"
+            
         results = client.search(**search_kwargs)
 
         formatted: list[dict[str, Any]] = []
@@ -223,6 +236,7 @@ class MilvusStore:
                     {
                         "category_name": str(entity.get("category_name")),
                         "summary": str(entity.get("summary")),
+                        "group_id": int(entity.get("group_id")) if entity.get("group_id") is not None else None,
                         "score": float(hit.get("distance", 0.0))
                     }
                 )
@@ -256,3 +270,4 @@ print("creating milvus_store singleton")
 milvus_store = MilvusStore()
 
 print("milvus_store singleton created")
+

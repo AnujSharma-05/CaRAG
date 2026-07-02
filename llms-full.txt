@@ -1,0 +1,128 @@
+# CaRAG Full Developer Reference & Guide
+
+This file provides comprehensive technical details for developer reference and AI context ingestion.
+
+## System Architecture
+
+CaRAG has two main parts:
+1. **Core Backend (Core Engine)**: A standalone python package (`core_backend`) containing the ingestion pipeline, automated categorization, categorization consolidation (taxonomy merging), Milvus store operations, and LLM utilities. It does not handle authentication or user/group multi-tenancy.
+2. **Live Backend (Adapter Layer)**: A FastAPI platform (`live/backend`) built on top of the Core Engine. It injects `core_backend` into `sys.path` and provides PostgreSQL persistence for users, groups, memberships, and categories, along with authentication (JWT) and routing.
+
+```
++-----------------------------------------------------------+
+|                  Telegram (OpenClaw)                      |
++----------------------------+------------------------------+
+                             | (REST / WebSocket)
+                             v
++----------------------------+------------------------------+
+|                    Live Adapter API                       |
+|  - auth.py (JWT)           - groups.py (CRUD)             |
+|  - documents.py            - chat.py (3-mode routing)     |
++----------------------------+------------------------------+
+                             | (sys.path import)
+                             v
++----------------------------+------------------------------+
+|                    Core RAG Engine                        |
+|  - services.py (Ingest)    - llm_service.py (Gemini API)  |
+|  - milvus_store.py         - config.py                    |
++----------------------------+------------------------------+
+         |                                  |
+         v (SQLAlchemy)                     v (Milvus SDK)
++--------+--------+                +--------+--------+
+|   PostgreSQL    |                |     Milvus      |
+|  - Users/Groups |                |  - doc_chunks   |
+|  - Categories   |                |  - cat_chunks   |
++-----------------+                +-----------------+
+```
+
+---
+
+## Detailed Data Models (PostgreSQL)
+
+### `User`
+- `id` (Integer, PK)
+- `email` (String, UK, Indexed)
+- `hashed_password` (String)
+- `created_at` (DateTime)
+- Relationships: `memberships` (GroupMember)
+
+### `Group`
+- `id` (Integer, PK)
+- `name` (String)
+- `created_by` (Integer, FK -> users.id)
+- `created_at` (DateTime)
+- Relationships: `members` (GroupMember), `documents` (Document), `categories` (Category)
+
+### `GroupMember`
+- `id` (Integer, PK)
+- `group_id` (Integer, FK -> groups.id, ondelete="CASCADE")
+- `user_id` (Integer, FK -> users.id, ondelete="CASCADE")
+- `joined_at` (DateTime)
+
+### `Document`
+- `id` (Integer, PK)
+- `filename` (String)
+- `file_path` (String)
+- `file_size` (Integer)
+- `status` (String: 'uploaded', 'processing', 'ready', 'failed')
+- `group_id` (Integer, FK -> groups.id, ondelete="CASCADE")
+- `created_at` (DateTime)
+- Relationships: `chunks` (DocumentChunk), `categories` (Category through DocumentCategory)
+
+### `Category`
+- `id` (Integer, PK)
+- `name` (String)
+- `group_id` (Integer, FK -> groups.id, ondelete="CASCADE")
+- `summary` (Text, LLM-generated summary of documents in this category)
+- `created_at` (DateTime)
+
+### `DocumentCategory`
+- `id` (Integer, PK)
+- `document_id` (Integer, FK -> documents.id, ondelete="CASCADE")
+- `category_id` (Integer, FK -> categories.id, ondelete="CASCADE")
+
+---
+
+## Vector Stores (Milvus)
+
+### Collection: `document_chunks`
+Stores raw chunk text embeddings for search.
+- **Fields**: `id` (INT64 PK), `vector` (FLOAT_VECTOR 384 dim), `document_id` (INT64 scalar filter), `chunk_index` (INT64), `content` (VARCHAR)
+- **Model**: `all-MiniLM-L6-v2` (384 dimensional dense embeddings)
+
+### Collection: `categorical_chunks`
+Stores category summaries.
+- **Fields**: `id` (INT64 PK), `vector` (FLOAT_VECTOR 384 dim), `category_name` (VARCHAR), `group_id` (INT64 scalar filter), `summary` (VARCHAR)
+
+---
+
+## 3-Mode Chat Routing (live/backend/src/chat.py)
+
+1. **Mode A (Doc Pin)**:
+   - Request specifies `document_id`.
+   - Fetches and checks user group membership of the document.
+   - Searches `document_chunks` using `document_id` as a scalar filter.
+2. **Mode B (Category Pin)**:
+   - Request specifies `category` name.
+   - Finds all `document_id`s in that group mapped to the specified category.
+   - Searches `document_chunks` using `document_id IN [...]` as a scalar filter.
+3. **Mode C (Auto-routing)**:
+   - No pins provided.
+   - Performs a semantic vector search on `categorical_chunks` filtered by the user's `group_id`.
+   - Runs the result through a Gemini classification prompt.
+   - If confidence is high, routes to the best matching category's document IDs.
+   - If confidence is low, falls back to searching all documents in the user's group.
+
+---
+
+## Taxonomy & Category Consolidation Flow
+
+1. **Document Ingestion**:
+   - Extraction: Reads first 5 and last 2 pages of the PDF.
+   - Classification: Gemini classifies the PDF content and either outputs a new specific category (e.g., "Harry Potter and the Sorcerer's Stone") or maps it to an existing one.
+2. **Post-Ingestion Consolidation**:
+   - `consolidate_categories(group_id)` triggers async task.
+   - Gemini reviews all category names and their summaries in the current group.
+   - If multiple categories are sub-parts or highly related (e.g., "Harry Potter Book 1" and "Harry Potter Book 2"), Gemini consolidates them into a broader parent category (e.g., "Harry Potter Books").
+   - Documents are mapped to the new parent category, and empty sub-categories are pruned.
+   - Category summaries are regenerated and updated in both Postgres and Milvus `categorical_chunks`.

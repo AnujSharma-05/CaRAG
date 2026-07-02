@@ -1,0 +1,5 @@
+# CaRAG Live Backend Requirements
+# Shares the same dependencies as the main CaRAG backend, plus any live-specific additions.
+# This file points directly to the main core_backend requirements.txt.
+
+-r ../../core_backend/requirements.txt

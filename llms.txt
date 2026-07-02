@@ -1,0 +1,30 @@
+# CaRAG: Categorical Routing Augmented Generation
+
+Multi-tenant, group-based RAG platform with automated category classification, multi-category taxonomy consolidation, and 3-mode query routing.
+
+## Metadata
+- **Backend Port (Core Engine)**: `8000` (run via `python -m uvicorn core_backend.src.main:app`)
+- **Backend Port (Live Adapter)**: `8001` (run via `python -m uvicorn live.backend.src.main:app`)
+- **Vector Database**: Milvus Standalone (Port `19530`, Attu GUI on `8000` in Docker)
+- **Relational Database**: PostgreSQL (Port `5432`, Database: `carag_db`)
+- **Frontend Port**: `5173` (React + Vite + TypeScript)
+
+## Core Codebase Structure
+
+- [core_backend/src/services.py](core_backend/src/services.py): PDF parsing, automated document categorization, text chunking, and multi-category taxonomical consolidation logic.
+- [core_backend/src/llm_service.py](core_backend/src/llm_service.py): Integrates Gemini 2.5 Flash for query classification, document auto-categorization, and category summary generation.
+- [core_backend/src/milvus_store.py](core_backend/src/milvus_store.py): Handles standard text chunk embeddings and group-scoped categorical chunk summaries in Milvus.
+- [live/backend/src/chat.py](live/backend/src/chat.py): 3-mode chat routing engine:
+  - **Mode A (Doc Pin)**: Scopes searches to a single document ID.
+  - **Mode B (Category Pin)**: Scopes searches to a specific category.
+  - **Mode C (Auto-routing)**: Routes queries via category semantic similarity and LLM confidence thresholds.
+- [live/backend/src/groups.py](live/backend/src/groups.py): Multi-tenant groups management, user memberships, and email-based invite validation workflows.
+- [live/backend/src/documents.py](live/backend/src/documents.py): Group-scoped document upload, retrieval, and cascading deletion (Postgres, local files, and Milvus vectors).
+- [live/backend/src/auth.py](live/backend/src/auth.py): User registration, JWT login generation, password hashing, and authentication dependencies.
+- [live/backend/src/models.py](live/backend/src/models.py): Database ORM models (`User`, `Group`, `GroupMember`, `Category`, `DocumentCategory`).
+- [live/backend/src/ws.py](live/backend/src/ws.py): WebSocket protocol endpoint stub.
+- [frontend/src/App.tsx](frontend/src/App.tsx): React dashboard interface for interacting with the CaRAG backend, managing documents, running diagnostics, and chatting.
+
+## References
+- [Files_for_reference/CaRAG_Live_Flows.md](Files_for_reference/CaRAG_Live_Flows.md): Comprehensive details of data flows, edge cases, and API specs.
+- [Files_for_reference/CaRAG_Live_Plan_v2.md](Files_for_reference/CaRAG_Live_Plan_v2.md): Platform layout, architecture decisions, and roadmap.

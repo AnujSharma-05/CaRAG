@@ -37,6 +37,7 @@ class User(Base):
     created_groups = relationship("Group", back_populates="creator")
     memberships = relationship("GroupMember", back_populates="user", cascade="all, delete-orphan")
 
+
 class Category(Base):
     __tablename__ = "categories"
 
@@ -73,7 +74,7 @@ class Document(Base):
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
     categories = relationship("Category", secondary="document_categories", back_populates="documents")
 
-class DocumentChunk(Base):
+class DocumentChunk(Base): 
     __tablename__ = "document_chunks"
 
     id = Column(Integer, primary_key=True, index=True)
