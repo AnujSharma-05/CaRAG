@@ -135,12 +135,21 @@ async def update_categorical_summary(category_name: str, group_id: int | None = 
             {category_context}
         """
         
-        from .llm_service import model
-        response = await asyncio.to_thread(
-            model.generate_content,
-            prompt,
-        )
-        summary_text = response.text.strip()
+        try:
+            from .llm_service import model
+            response = await asyncio.to_thread(
+                model.generate_content,
+                prompt,
+            )
+            summary_text = response.text.strip()
+        except Exception as exc:
+            err_msg = str(exc)
+            if "429" in err_msg or "quota" in err_msg.lower() or "limit" in err_msg.lower():
+                # Heuristic fallback summary for local offline or rate-limit testing
+                doc_titles = ", ".join([d.filename for d in docs])
+                summary_text = f"This category of documents covers topics related to {category_name}. It includes files like: {doc_titles}."
+            else:
+                raise exc
         
         # Generate summary embedding
         summary_vector = _embed_query(summary_text)
