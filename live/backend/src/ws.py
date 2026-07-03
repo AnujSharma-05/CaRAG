@@ -122,6 +122,8 @@ async def websocket_endpoint(
                                 hits = milvus_store.search(query_embedding=query_vector, top_k=top_k, document_ids=group_doc_ids)
                             else:
                                 try:
+                                    if bypass_llm:
+                                        raise Exception("Bypassing LLM routing voluntarily")
                                     chosen_category = await classify_query_category(question, category_matches)
                                 except Exception:
                                     chosen_category = category_matches[0]["category_name"]

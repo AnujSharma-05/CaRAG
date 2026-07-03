@@ -128,6 +128,8 @@ async def group_chat(
             else:
                 # STEP 4: LLM routing — cheap classification call, returns category name
                 try:
+                    if payload.bypass_llm:
+                        raise Exception("Bypassing LLM routing voluntarily")
                     chosen_category = await classify_query_category(
                         question=payload.question,
                         category_candidates=category_matches,

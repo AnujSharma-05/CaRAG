@@ -108,7 +108,7 @@ async def upload_pdf(
         "filename": new_doc.filename,
         "status": new_doc.status,
         "file_size": new_doc.file_size,
-        "category": cat_name
+        "categories": [cat_name]
     }
 
 #----get all documents----
@@ -125,7 +125,7 @@ async def get_documents(
             "filename": doc.filename,
             "status": doc.status,
             "file_size": doc.file_size if getattr(doc, "file_size", None) is not None else (os.path.getsize(doc.file_path) if doc.file_path and os.path.exists(doc.file_path) else 0), #Explaination of this line: This line is checking if the file_size attribute exists on the doc object and is not None. If it does exist and is not None, it uses that value. If it does not exist or is None, it checks if the file_path attribute exists and if the file at that path exists. If both conditions are true, it gets the size of the file using os.path.getsize(doc.file_path). If either condition is false, it defaults to 0. This ensures that we have a valid file size value even if the file_size attribute is missing or None, or if the file itself is missing.
-            "category": ", ".join([c.name for c in doc.categories]) if doc.categories else "general",
+            "categories": [c.name for c in doc.categories] if doc.categories else ["general"],
         }
         for doc in docs
     ]
@@ -144,7 +144,7 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
         "filename": doc.filename,
         "status": doc.status,
         "file_size": doc.file_size if doc.file_size is not None else (os.path.getsize(doc.file_path) if doc.file_path and os.path.exists(doc.file_path) else 0),
-        "category": ", ".join([c.name for c in doc.categories]) if doc.categories else "general",
+        "categories": [c.name for c in doc.categories] if doc.categories else ["general"],
     }
 
 

@@ -18,6 +18,13 @@ async def create_group(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+     # 0. Check for duplicate group name globally
+    existing_group = db.query(models.Group).filter(models.Group.name == group.name).first()
+    if existing_group:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A group with the name '{group.name}' already exists."
+        )
     # 1. Create the Group
     new_group = models.Group(name=group.name, created_by=current_user.id)
     db.add(new_group)

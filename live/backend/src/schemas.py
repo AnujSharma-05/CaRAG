@@ -79,7 +79,6 @@ class DocumentStatusUpdate(BaseModel):
 # These are Group Scoped 
 class ChatRequest(BaseModel):
     question: str
-    group_id: int
     top_k: int = 5
     # Optional manual overrides — if set, bypass automatic 2-stage routing
     category: str | None = None      # Mode B: pin to a specific category

@@ -96,8 +96,8 @@ async def upload_document(
             "filename": filename
         })
         
-        # Run the synchronous CPU-bound task in a thread
-        await asyncio.to_thread(services.process_document_task, doc_id, filename)
+        # Run the async ingestion task
+        await services.process_document_task(doc_id, filename)
         
         # Fetch the updated doc status
         db_session = sessionLocal()

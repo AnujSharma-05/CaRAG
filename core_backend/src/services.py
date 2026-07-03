@@ -452,6 +452,8 @@ async def answer_question(question: str, document_id: int | None = None, categor
                 # LLM Routing (LLM Call 1)
                 from . import llm_service
                 try:
+                    if bypass_llm:
+                        raise Exception("Bypassing LLM routing voluntarily")
                     chosen_category = await llm_service.classify_query_category(
                         question=question,
                         category_candidates=matches
