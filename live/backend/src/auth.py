@@ -80,3 +80,22 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/mapping")
+async def get_users_mapping(db: Session = Depends(get_db)):
+    """
+    Open endpoint to show the mapping of all users, their details, 
+    and the groups they are involved in.
+    """
+    users = db.query(models.User).all()
+    mapping = []
+    for user in users:
+        user_groups = db.query(models.Group).join(models.GroupMember).filter(
+            models.GroupMember.user_id == user.id
+        ).all()
+        mapping.append({
+            "user_id": user.id,
+            "email": user.email,
+            "groups": [{"group_id": g.id, "name": g.name} for g in user_groups]
+        })
+    return mapping
