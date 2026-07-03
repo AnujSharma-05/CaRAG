@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+env/
+.env
+
+# Node
+node_modules/
+
+# Scratch & Temporary
+scratch/
+core_backend/scratch/
+backend/scratch/
+live/backend/scratch/
+
+# Uploads
+uploads/
+
+# OS Files
+.DS_Store
+
+# Untracked backend leftover
+backend/
