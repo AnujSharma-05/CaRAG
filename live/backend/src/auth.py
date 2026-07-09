@@ -99,3 +99,32 @@ async def get_users_mapping(db: Session = Depends(get_db)):
             "groups": [{"group_id": g.id, "name": g.name} for g in user_groups]
         })
     return mapping
+
+
+@router.post("/reset")
+async def reset_live_db(db: Session = Depends(get_db)):
+    """
+    Reset endpoint that deletes all users, groups, and membership records,
+    but keeps the ingested documents intact (clearing their group associations).
+    """
+    try:
+        # 1. Clear group association on all documents so they aren't deleted by CASCADE
+        db.query(models.Document).update({models.Document.group_id: None})
+        db.commit()
+
+        # 2. Delete all group members
+        db.query(models.GroupMember).delete()
+        db.commit()
+
+        # 3. Delete all groups
+        db.query(models.Group).delete()
+        db.commit()
+
+        # 4. Delete all users
+        db.query(models.User).delete()
+        db.commit()
+
+        return {"message": "Live layer database reset successful. All users and groups deleted. Document files preserved with cleared group associations."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database reset failed: {str(e)}")

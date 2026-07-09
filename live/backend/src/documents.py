@@ -122,7 +122,14 @@ async def upload_document(
             db_session.close()
 
     background_tasks.add_task(process_document_task_with_ws, new_doc.id, file.filename, group_id)
-    return new_doc
+    return {
+        "id": new_doc.id,
+        "filename": new_doc.filename,
+        "status": new_doc.status,
+        "file_size": new_doc.file_size if new_doc.file_size is not None else (os.path.getsize(new_doc.file_path) if new_doc.file_path and os.path.exists(new_doc.file_path) else 0),
+        "group_id": new_doc.group_id,
+        "categories": [c.name for c in new_doc.categories] if new_doc.categories else ["general"]
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -137,7 +144,17 @@ async def list_documents(
     _assert_membership(db, group_id, current_user.id)
 
     docs = db.query(models.Document).filter(models.Document.group_id == group_id).all()
-    return docs
+    return [
+        {
+            "id": doc.id,
+            "filename": doc.filename,
+            "status": doc.status,
+            "file_size": doc.file_size if doc.file_size is not None else (os.path.getsize(doc.file_path) if doc.file_path and os.path.exists(doc.file_path) else 0),
+            "group_id": doc.group_id,
+            "categories": [c.name for c in doc.categories] if doc.categories else ["general"]
+        }
+        for doc in docs
+    ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

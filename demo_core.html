@@ -8,13 +8,14 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
         :root {
-            --bg-dark: #090d16;
-            --bg-card: #151f32;
-            --border-color: #2e3e59;
-            --text-primary: #f1f5f9;
+            --bg-dark: #0b0f19;
+            --bg-card: rgba(22, 32, 54, 0.7);
+            --border-color: rgba(46, 62, 89, 0.6);
+            --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
             --core-color: #3b82f6;
-            --bg-input: #0f172a;
+            --core-color-glow: rgba(59, 130, 246, 0.25);
+            --bg-input: #090d16;
             --font-main: 'Inter', sans-serif;
             --font-code: 'JetBrains Mono', monospace;
         }
@@ -22,6 +23,8 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             background-color: var(--bg-dark);
+            background-image: radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+                              radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
             color: var(--text-primary);
             font-family: var(--font-main);
             display: flex;
@@ -30,25 +33,30 @@
             overflow: hidden;
         }
         header {
-            background-color: var(--bg-card);
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--border-color);
             padding: 1rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            height: 70px;
+            height: 75px;
             flex-shrink: 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+            z-index: 10;
         }
         header h1 {
             font-size: 1.5rem;
             font-weight: 700;
-            color: var(--core-color);
+            background: linear-gradient(135deg, #60a5fa, #2563eb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        .subtitle { font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem; }
+        .subtitle { font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.25rem; }
         
         .main-layout {
             display: flex;
-            height: calc(100vh - 70px);
+            height: calc(100vh - 75px);
             flex: 1;
             overflow: hidden;
         }
@@ -58,7 +66,7 @@
             padding: 2rem;
             display: flex;
             flex-direction: column;
-            gap: 2rem;
+            gap: 1.75rem;
         }
         .right-pane {
             width: 45%;
@@ -66,64 +74,109 @@
             border-left: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            background-color: #020617;
+            background-color: #05070f;
             flex-shrink: 0;
         }
 
         .section-box {
             background-color: var(--bg-card);
+            backdrop-filter: blur(8px);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1.25rem;
+            border-radius: 12px;
+            padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 0.85rem;
+            gap: 1rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .section-box h3 { font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
-        .form-row { display: flex; flex-direction: column; gap: 0.35rem; }
-        label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; }
+        .section-box:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+            box-shadow: 0 8px 32px var(--core-color-glow);
+        }
+        .section-box h3 { 
+            font-size: 0.875rem; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.08em; 
+            color: #60a5fa; 
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .form-row { display: flex; flex-direction: column; gap: 0.4rem; }
+        label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
         input[type="text"], input[type="number"], select {
             background-color: var(--bg-input);
             border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.5rem;
+            border-radius: 8px;
+            padding: 0.65rem 0.85rem;
             color: var(--text-primary);
             font-family: var(--font-main);
             font-size: 0.875rem;
             outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        input[type="text"]:focus, input[type="number"]:focus, select:focus { border-color: var(--core-color); }
-        .btn-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        input[type="text"]:focus, input[type="number"]:focus, select:focus { 
+            border-color: var(--core-color); 
+            box-shadow: 0 0 0 3px var(--core-color-glow);
+        }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 0.65rem; }
         button {
             cursor: pointer;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
+            padding: 0.65rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
             font-weight: 600;
             border: none;
-            transition: opacity 0.2s;
+            transition: all 0.2s ease-in-out;
         }
-        button:hover { opacity: 0.9; }
-        .btn-primary { background-color: var(--core-color); color: white; }
-        .btn-danger { background-color: #ef4444; color: white; }
-        .btn-sec { background-color: transparent; border: 1px solid var(--border-color); color: var(--text-primary); }
+        .btn-primary { 
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8); 
+            color: white; 
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .btn-primary:hover { 
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+            opacity: 0.95;
+        }
+        .btn-danger { 
+            background: linear-gradient(135deg, #ef4444, #b91c1c); 
+            color: white; 
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+        }
+        .btn-danger:hover { 
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+            opacity: 0.95;
+        }
+        .btn-sec { 
+            background-color: transparent; 
+            border: 1px solid var(--border-color); 
+            color: var(--text-primary); 
+        }
+        .btn-sec:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
         
         .console-area {
             display: flex;
             flex-direction: column;
             height: 100%;
-            padding: 1.5rem;
+            padding: 1.75rem;
             overflow: hidden;
         }
         .console-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-bottom: 0.75rem;
+            padding-bottom: 0.85rem;
             border-bottom: 1px solid var(--border-color);
             flex-shrink: 0;
         }
-        .console-title { font-size: 0.875rem; font-weight: 600; color: var(--core-color); font-family: var(--font-code); }
+        .console-title { font-size: 0.8125rem; font-weight: 700; color: #60a5fa; font-family: var(--font-code); letter-spacing: 0.05em; }
         .console-logs {
             flex: 1;
             overflow-y: auto;
@@ -132,30 +185,99 @@
             color: #38bdf8;
             padding-top: 1rem;
         }
-        .log-entry { margin-bottom: 0.4rem; white-space: pre-wrap; line-height: 1.4; }
+        .log-entry { margin-bottom: 0.5rem; white-space: pre-wrap; line-height: 1.45; border-bottom: 1px solid rgba(255,255,255,0.02); padding-bottom: 0.35rem; }
         .log-error { color: #f87171; }
         .log-success { color: #4ade80; }
         .log-info { color: #38bdf8; }
 
         .diagram-section {
-            border-top: 2px dashed var(--border-color);
+            border-top: 1px dashed var(--border-color);
             padding-top: 2rem;
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 1.25rem;
         }
         .diagram-section h2 {
             font-size: 1.25rem;
             font-weight: 600;
-            color: var(--core-color);
+            color: #60a5fa;
         }
         .mermaid {
             background-color: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1rem;
+            border-radius: 12px;
+            padding: 1.5rem;
             display: flex;
             justify-content: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Prominent Toggle Design */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 0.85rem 1.15rem;
+            border-radius: 10px;
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .toggle-label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .toggle-label span {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+        .toggle-label small {
+            font-size: 0.725rem;
+            color: var(--text-secondary);
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #334155;
+            transition: .3s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--core-color);
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
         }
     </style>
 </head>
@@ -272,6 +394,17 @@
                         </div>
                     </div>
 
+                    <div class="toggle-container">
+                        <div class="toggle-label">
+                            <span>Bypass LLM Generation</span>
+                            <small>Perform raw semantic vector search only (Zero API cost)</small>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="coreBypassLlm">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
                     <div class="form-row" style="margin-bottom: 1rem;">
                         <label>Top-K Results Limit (Context Volume)</label>
                         <div style="display: flex; align-items: center; gap: 1rem;">
@@ -307,26 +440,80 @@
             <div class="diagram-section">
                 <h2>CaRAG Core Architecture Flow</h2>
                 <div class="mermaid">
-                    graph TD
-                        A[Query Input] --> B{Document ID / Category Filtered?}
-                        B -->|Yes: Mode A/B| C[Milvus Search Pinned Scope]
-                        B -->|No: Mode C Fallback| D[Stage 1: Milvus Category Search]
-                        D --> E[Retrieve Top Category Embeddings]
-                        E --> F[Stage 2: Milvus Chunk Search inside Categories]
-                        C --> G[Retrieve Matched Context Chunks]
-                        F --> G
-                        G --> H{Gemini LLM Rate Limited?}
-                        H -->|No| I[Gemini Synthesizes Answer with Citations]
-                        H -->|Yes| J[Graceful Fallback: Return context directly as answer]
-                        I --> K[Final Output Response]
-                        J --> K
+                    sequenceDiagram
+                        actor User
+                        participant FastAPI Server
+                        participant PostgreSQL
+                        participant Background Task
+                        participant Milvus Vector DB
+                        participant Google Gemini
+
+                        User->>FastAPI Server: "POST /upload (PDF, optional category)"
+                        FastAPI Server->>FastAPI Server: "Save PDF to uploads"
+                        FastAPI Server->>PostgreSQL: "Save document metadata (status: uploaded, category)"
+                        FastAPI Server->>Background Task: "Spawn process_document_task(doc_id)"
+                        FastAPI Server-->>User: "Return Document ID & status uploaded"
+
+                        rect rgba(255, 255, 255, 0.05)
+                        Note over Background Task, Google Gemini: Asynchronous Document Ingestion
+                        Background Task->>PostgreSQL: "Update status to processing"
+                        Background Task->>Background Task: "Extract & chunk text"
                         
-                        style A fill:#1e293b,stroke:#3b82f6,stroke-width:2px;
-                        style C fill:#1e293b,stroke:#3b82f6,stroke-width:2px;
-                        style D fill:#1e293b,stroke:#10b981,stroke-width:2px;
-                        style I fill:#152720,stroke:#10b981,stroke-width:2px;
-                        style J fill:#271612,stroke:#ef4444,stroke-width:2px;
-                        style K fill:#1e293b,stroke:#3b82f6,stroke-width:2px;
+                        rect rgba(255, 200, 0, 0.1)
+                        Note over Background Task, Google Gemini: Auto Categorization (If category is blank)
+                        Background Task->>Milvus Vector DB: "Search categorical chunks (header embedding)"
+                        alt Cosine Similarity >= 0.60
+                            Background Task->>Background Task: "Assign matched category"
+                        else Cosine Similarity < 0.60
+                            Background Task->>Google Gemini: "classify_ingested_document (Gemini Call 0)"
+                            Google Gemini-->>Background Task: "Return classifier category name"
+                        end
+                        end
+                        
+                        Background Task->>PostgreSQL: "Update document.category = resolved_category"
+                        Background Task->>Background Task: "Generate chunk embeddings"
+                        Background Task->>Milvus Vector DB: "Upsert chunk vectors to document_chunks"
+                        Background Task->>PostgreSQL: "Save chunk metadata and Milvus IDs"
+                        Background Task->>PostgreSQL: "Update document status to ready"
+                        
+                        Background Task->>Background Task: "spawn update_categorical_summary(category)"
+                        Background Task->>PostgreSQL: "Fetch all ready document chunks in category"
+                        Background Task->>Google Gemini: "Generate category summary (Gemini)"
+                        Google Gemini-->>Background Task: "Return unified category summary"
+                        Background Task->>Background Task: "Embed summary text"
+                        Background Task->>Milvus Vector DB: "Upsert summary to categorical_chunks"
+                        end
+
+                        User->>FastAPI Server: "POST /chat (question, document_id, category)"
+                        FastAPI Server->>FastAPI Server: "Embed question text"
+                        
+                        alt Manual Filter Active (document_id or category)
+                            rect rgba(255, 200, 0, 0.1)
+                            Note over FastAPI Server, Milvus Vector DB: Bypass Stage 1 routing
+                            alt Category Filter
+                                FastAPI Server->>PostgreSQL: "Query document IDs under category"
+                            end
+                            FastAPI Server->>Milvus Vector DB: "Search document_chunks (filtered by doc IDs)"
+                            end
+                        else No Filters (Two-Stage Routing Flow)
+                            FastAPI Server->>Milvus Vector DB: "Search categorical_chunks (Stage 1)"
+                            alt Top Category Score < 0.35
+                                rect rgba(255, 200, 0, 0.1)
+                                Note over FastAPI Server: Confidence Fallback
+                                FastAPI Server->>Milvus Vector DB: "Global search document_chunks (no filters)"
+                                end
+                            else Top Category Score >= 0.35
+                                FastAPI Server->>Google Gemini: "classify_query_category (Gemini Call 1)"
+                                Google Gemini-->>FastAPI Server: "Return targeted category"
+                                FastAPI Server->>PostgreSQL: "Query document IDs under category"
+                                FastAPI Server->>Milvus Vector DB: "Search document_chunks (filtered by doc IDs)"
+                            end
+                        end
+
+                        Milvus Vector DB-->>FastAPI Server: "Return highly relevant chunks"
+                        FastAPI Server->>Google Gemini: "Send context chunks + question (Gemini Call 2)"
+                        Google Gemini-->>FastAPI Server: "Formulate grounded answer"
+                        FastAPI Server-->>User: "Return Answer + Source Citations"
                 </div>
             </div>
         </div>
@@ -465,12 +652,14 @@
             const docIdVal = document.getElementById("chatDocId").value;
             const catVal = document.getElementById("chatCategory").value.trim();
             const topK = parseInt(document.getElementById("chatTopK").value);
+            const bypass = document.getElementById("coreBypassLlm").checked;
 
             const payload = {
                 question: question,
                 top_k: topK,
                 document_id: docIdVal ? parseInt(docIdVal) : null,
-                category: catVal ? catVal : null
+                category: catVal ? catVal : null,
+                bypass_llm: bypass
             };
 
             await callApi("/chat", "POST", payload);
