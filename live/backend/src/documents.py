@@ -40,6 +40,7 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), # Upload the PDF file
     category: str | None = Form(None), # Optional category for the document
+    bypass_llm: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -86,7 +87,7 @@ async def upload_document(
         db.commit()
 
     # Kick off the original CaRAG engine's ingestion pipeline in the background with WS events
-    async def process_document_task_with_ws(doc_id: int, filename: str, group_id: int):
+    async def process_document_task_with_ws(doc_id: int, filename: str, group_id: int, bypass_llm: bool = False):
         from .ws_manager import manager
         from .database import sessionLocal
         
@@ -97,7 +98,7 @@ async def upload_document(
         })
         
         # Run the async ingestion task
-        await services.process_document_task(doc_id, filename)
+        await services.process_document_task(doc_id, filename, bypass_llm)
         
         # Fetch the updated doc status
         db_session = sessionLocal()
@@ -121,7 +122,7 @@ async def upload_document(
         finally:
             db_session.close()
 
-    background_tasks.add_task(process_document_task_with_ws, new_doc.id, file.filename, group_id)
+    background_tasks.add_task(process_document_task_with_ws, new_doc.id, file.filename, group_id, bypass_llm)
     return {
         "id": new_doc.id,
         "filename": new_doc.filename,

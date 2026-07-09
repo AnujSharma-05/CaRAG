@@ -8,15 +8,15 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
         :root {
-            --bg-dark: #070d0a;
-            --bg-card: rgba(21, 39, 32, 0.7);
-            --border-color: rgba(39, 68, 54, 0.6);
-            --text-primary: #f8fafc;
-            --text-secondary: #a7f3d0;
-            --live-color: #10b981;
-            --live-color-glow: rgba(16, 185, 129, 0.25);
-            --accent-warning: #f59e0b;
-            --bg-input: #040907;
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --live-color: #56d364;
+            --live-color-glow: rgba(86, 211, 100, 0.15);
+            --accent-warning: #e3b341;
+            --bg-input: #0d1117;
             --font-main: 'Inter', sans-serif;
             --font-code: 'JetBrains Mono', monospace;
         }
@@ -24,8 +24,6 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             background-color: var(--bg-dark);
-            background-image: radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
-                              radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
             color: var(--text-primary);
             font-family: var(--font-main);
             display: flex;
@@ -34,8 +32,7 @@
             overflow: hidden;
         }
         header {
-            background: rgba(4, 13, 10, 0.8);
-            backdrop-filter: blur(12px);
+            background: #161b22;
             border-bottom: 1px solid var(--border-color);
             padding: 1rem 2rem;
             display: flex;
@@ -43,15 +40,12 @@
             align-items: center;
             height: 75px;
             flex-shrink: 0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
             z-index: 10;
         }
         header h1 {
             font-size: 1.5rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #34d399, #059669);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--live-color);
         }
         .subtitle { font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.25rem; }
         
@@ -75,33 +69,29 @@
             border-left: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            background-color: #030806;
+            background-color: #0d1117;
             flex-shrink: 0;
             overflow: hidden;
         }
 
         .section-box {
             background-color: var(--bg-card);
-            backdrop-filter: blur(8px);
             border: 1px solid var(--border-color);
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 1.5rem;
             display: flex;
             flex-direction: column;
             gap: 1rem;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-            transition: border-color 0.2s, box-shadow 0.2s;
         }
         .section-box:hover {
-            border-color: rgba(16, 185, 129, 0.4);
-            box-shadow: 0 8px 32px var(--live-color-glow);
+            border-color: var(--live-color);
         }
         .section-box h3 { 
             font-size: 0.875rem; 
             font-weight: 700; 
             text-transform: uppercase; 
             letter-spacing: 0.08em; 
-            color: #34d399; 
+            color: var(--live-color); 
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             padding-bottom: 0.5rem;
             margin-bottom: 0.25rem;
@@ -403,6 +393,16 @@
                         <label>Category Tag</label>
                         <input type="text" id="groupDocCategory" placeholder="e.g. policies, financial">
                     </div>
+                    <div class="toggle-container" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); margin-bottom: 0.75rem;">
+                        <div class="toggle-label">
+                            <span>Bypass LLM Ingestion</span>
+                            <small>Disable LLM Auto-Categorization/Summary/Consolidation</small>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="liveUploadBypassLlm">
+                            <span class="slider" style="background-color: #334155;"></span>
+                        </label>
+                    </div>
                     <div class="btn-group">
                         <button type="submit" class="btn-primary">Upload Doc to Group</button>
                         <button type="button" class="btn-sec" onclick="listGroupDocs()">List Group Docs</button>
@@ -532,17 +532,18 @@
                     sequenceDiagram
                         autonumber
                         actor User as User Client
-                        participant Live as Live Backend (8001)
+                        participant Live as Live Backend (Port 8001)
                         participant DB as Postgres DB
-                        participant Core as Core Engine (8000)
+                        participant Core as Core Engine (Port 8000)
                         participant Milvus as Milvus DB
+                        participant Gemini as Google Gemini API
 
                         User->>Live: "POST /auth/login (email, password)"
                         Live->>DB: "Query User & verify password hash"
                         DB-->>Live: "User verified"
                         Live-->>User: "JWT token (claims: {sub: user_id})"
 
-                        User->>Live: "GET /groups/5 (Authorization: Bearer <JWT>)"
+                        User->>Live: "GET /groups/5 (Authorization: Bearer JWT)"
                         Live->>DB: "Query GroupMember (group_id: 5, user_id)"
                         alt Is NOT Member
                             Live-->>User: "HTTP 403 Forbidden"
@@ -560,6 +561,7 @@
                         Live->>Core: "GET /chat (question, group_id: 5)"
                         Core->>Milvus: "Search matching chunks (filter: group_id == 5)"
                         Core->>Gemini: "Synthesize final answer using scoped chunks"
+                        Gemini-->>Core: "Grounded Answer"
                         Core-->>Live: "Response"
                         Live-->>User: "Scoped Answer & Citations"
                 </div>
@@ -809,6 +811,9 @@
             if (cat) {
                 formData.append("category", cat);
             }
+
+            const bypassVal = document.getElementById("liveUploadBypassLlm").checked;
+            formData.append("bypass_llm", bypassVal);
 
             const url = `${BASE_URL}/groups/${activeGroupId}/documents`;
             logRest(`[REQUEST] POST ${url} (Multipart Form)`, "info");
