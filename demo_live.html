@@ -407,6 +407,7 @@
                         <button type="submit" class="btn-primary">Upload Doc to Group</button>
                         <button type="button" class="btn-sec" onclick="listGroupDocs()">List Group Docs</button>
                         <button type="button" class="btn-sec" onclick="callApi(`/groups/${activeGroupId}/categories`, 'GET')">List Group Categories</button>
+                        <button type="button" class="btn-sec" onclick="listGroupCategoriesWithDocs()">List Categories & Summaries</button>
                     </div>
                 </form>
 
@@ -843,6 +844,14 @@
                 return;
             }
             await callApi(`/groups/${activeGroupId}/documents`, "GET");
+        }
+
+        async function listGroupCategoriesWithDocs() {
+            if (!activeGroupId) {
+                logRest("[WARNING] Active Group ID required to list categories & summaries", "error");
+                return;
+            }
+            await callApi(`/groups/${activeGroupId}/categories-with-docs`, "GET");
         }
 
         async function deleteDoc() {

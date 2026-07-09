@@ -159,6 +159,15 @@ async def update_categorical_summary(category_name: str, group_id: int | None = 
         # Generate summary embedding
         summary_vector = _embed_query(summary_text)
         
+        # Update summary in SQL
+        cat_obj = db.query(models.Category).filter(
+            models.Category.name == category_name,
+            models.Category.group_id == group_id
+        ).first()
+        if cat_obj:
+            cat_obj.summary = summary_text
+            db.commit()
+
         # Upsert in Milvus
         milvus_store.upsert_category_summary(
             category_name=category_name,
