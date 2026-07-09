@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CaRAG Core Engine Console</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
         :root {
             --bg-dark: #090d16;
@@ -25,15 +26,18 @@
             font-family: var(--font-main);
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
         }
         header {
             background-color: var(--bg-card);
             border-bottom: 1px solid var(--border-color);
-            padding: 1.25rem 2rem;
+            padding: 1rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            height: 70px;
+            flex-shrink: 0;
         }
         header h1 {
             font-size: 1.5rem;
@@ -41,31 +45,33 @@
             color: var(--core-color);
         }
         .subtitle { font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem; }
-        .grid-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            padding: 2rem;
+        
+        .main-layout {
+            display: flex;
+            height: calc(100vh - 70px);
             flex: 1;
+            overflow: hidden;
         }
-        .panel {
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
+        .left-pane {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
+            gap: 2rem;
         }
-        .panel-header {
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.75rem;
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: var(--core-color);
+        .right-pane {
+            width: 45%;
+            height: 100%;
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            background-color: #020617;
+            flex-shrink: 0;
         }
+
         .section-box {
-            background-color: rgba(15, 23, 42, 0.4);
+            background-color: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 1.25rem;
@@ -103,15 +109,20 @@
         .btn-sec { background-color: transparent; border: 1px solid var(--border-color); color: var(--text-primary); }
         
         .console-area {
-            background-color: #020617;
-            border-top: 1px solid var(--border-color);
-            padding: 1.5rem 2rem;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
-            height: 280px;
+            height: 100%;
+            padding: 1.5rem;
+            overflow: hidden;
         }
-        .console-header { display: flex; justify-content: space-between; align-items: center; }
+        .console-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
         .console-title { font-size: 0.875rem; font-weight: 600; color: var(--core-color); font-family: var(--font-code); }
         .console-logs {
             flex: 1;
@@ -119,15 +130,33 @@
             font-family: var(--font-code);
             font-size: 0.8125rem;
             color: #38bdf8;
-            background-color: #020617;
-            padding: 0.75rem;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
+            padding-top: 1rem;
         }
         .log-entry { margin-bottom: 0.4rem; white-space: pre-wrap; line-height: 1.4; }
         .log-error { color: #f87171; }
         .log-success { color: #4ade80; }
         .log-info { color: #38bdf8; }
+
+        .diagram-section {
+            border-top: 2px dashed var(--border-color);
+            padding-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .diagram-section h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--core-color);
+        }
+        .mermaid {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
@@ -142,12 +171,19 @@
         </a>
     </header>
 
-    <div class="grid-container">
-        <!-- Document Operations Panel -->
-        <div class="panel">
-            <div class="panel-header">Document & System Operations</div>
+    <div class="main-layout">
+        <!-- Scrollable Action Pane (Left) -->
+        <div class="left-pane">
+            <!-- Utility Checks -->
+            <div class="section-box">
+                <h3>Utility Checks</h3>
+                <div class="btn-group">
+                    <button class="btn-sec" onclick="callApi('/ping', 'GET')">Ping Engine</button>
+                    <button class="btn-sec" onclick="callApi('/documents', 'GET')">List Documents</button>
+                </div>
+            </div>
 
-            <!-- Ingestion Test Area -->
+            <!-- Ingest PDF -->
             <div class="section-box">
                 <h3>Document Ingestion (POST /upload)</h3>
                 <form id="uploadForm" onsubmit="handleUpload(event)">
@@ -215,12 +251,8 @@
                     <button class="btn-sec" onclick="callApi('/clean-system', 'POST')">Force Clean System Memory</button>
                 </div>
             </div>
-        </div>
 
-        <!-- RAG Chat Operations Panel -->
-        <div class="panel">
-            <div class="panel-header">Standalone RAG Query Testing</div>
-
+            <!-- RAG Chat Operations -->
             <div class="section-box">
                 <h3>RAG Query Configuration (POST /chat)</h3>
                 <form id="queryForm" onsubmit="handleQuery(event)">
@@ -248,9 +280,7 @@
                         </div>
                     </div>
 
-                    <div class="btn-group">
-                        <button type="submit" class="btn-primary" style="flex: 1;">Execute Chat Request</button>
-                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%;">Execute Chat Request</button>
                 </form>
             </div>
 
@@ -272,25 +302,53 @@
                     </button>
                 </div>
             </div>
-            
-            <div class="btn-group" style="margin-top: auto;">
-                <button class="btn-sec" onclick="callApi('/ping', 'GET')">Core Ping Check</button>
+
+            <!-- Flow Diagram Section -->
+            <div class="diagram-section">
+                <h2>CaRAG Core Architecture Flow</h2>
+                <div class="mermaid">
+                    graph TD
+                        A[Query Input] --> B{Document ID / Category Filtered?}
+                        B -->|Yes: Mode A/B| C[Milvus Search Pinned Scope]
+                        B -->|No: Mode C Fallback| D[Stage 1: Milvus Category Search]
+                        D --> E[Retrieve Top Category Embeddings]
+                        E --> F[Stage 2: Milvus Chunk Search inside Categories]
+                        C --> G[Retrieve Matched Context Chunks]
+                        F --> G
+                        G --> H{Gemini LLM Rate Limited?}
+                        H -->|No| I[Gemini Synthesizes Answer with Citations]
+                        H -->|Yes| J[Graceful Fallback: Return context directly as answer]
+                        I --> K[Final Output Response]
+                        J --> K
+                        
+                        style A fill:#1e293b,stroke:#3b82f6,stroke-width:2px;
+                        style C fill:#1e293b,stroke:#3b82f6,stroke-width:2px;
+                        style D fill:#1e293b,stroke:#10b981,stroke-width:2px;
+                        style I fill:#152720,stroke:#10b981,stroke-width:2px;
+                        style J fill:#271612,stroke:#ef4444,stroke-width:2px;
+                        style K fill:#1e293b,stroke:#3b82f6,stroke-width:2px;
+                </div>
+            </div>
+        </div>
+
+        <!-- Fixed Logs Pane (Right) -->
+        <div class="right-pane">
+            <div class="console-area">
+                <div class="console-header">
+                    <span class="console-title">>_ CORE RUNTIME EXECUTION OUTPUT & API RESPONSES</span>
+                    <button class="btn-sec" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="clearLogs()">Clear Console</button>
+                </div>
+                <div class="console-logs" id="consoleLogs">
+                    <div class="log-entry log-info">[SYSTEM] Core Engine console ready. Server targeted: http://localhost:8000</div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- API Response logs -->
-    <div class="console-area">
-        <div class="console-header">
-            <span class="console-title">>_ CORE RUNTIME EXECUTION OUTPUT & API RESPONSES</span>
-            <button class="btn-sec" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="clearLogs()">Clear Console</button>
-        </div>
-        <div class="console-logs" id="consoleLogs">
-            <div class="log-entry log-info">[SYSTEM] Core Engine console ready. Server targeted: http://localhost:8000</div>
-        </div>
-    </div>
-
     <script>
+        // Initialize Mermaid
+        mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose' });
+
         const BASE_URL = "http://localhost:8000";
 
         function log(message, type = "info") {
