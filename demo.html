@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CaRAG API Demonstration Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --border-color: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --core-color: #3b82f6;
+            --live-color: #10b981;
+            --accent-warning: #f59e0b;
+            --bg-input: #0f172a;
+            --font-main: 'Inter', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--core-color), var(--live-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            flex: 1;
+        }
+
+        .column {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.75rem;
+        }
+
+        .column-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .core-badge {
+            color: var(--core-color);
+            border: 1px solid var(--core-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .live-badge {
+            color: var(--live-color);
+            border: 1px solid var(--live-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .section-box {
+            background-color: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .section-box h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        input[type="text"], input[type="password"], input[type="number"], select {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.5rem;
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: 0.875rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus, select:focus {
+            border-color: var(--text-secondary);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: none;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .btn-core {
+            background-color: var(--core-color);
+            color: white;
+        }
+
+        .btn-live {
+            background-color: var(--live-color);
+            color: white;
+        }
+
+        .btn-sec {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .console-area {
+            background-color: #020617;
+            border-top: 1px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            max-height: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .console-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .console-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--accent-warning);
+            font-family: var(--font-code);
+        }
+
+        .console-logs {
+            flex: 1;
+            overflow-y: auto;
+            font-family: var(--font-code);
+            font-size: 0.8125rem;
+            color: #10b981;
+            background-color: #020617;
+            padding: 0.5rem;
+            border: 1px solid #1e293b;
+            border-radius: 4px;
+            min-height: 120px;
+            max-height: 180px;
+        }
+
+        .log-entry {
+            margin-bottom: 0.25rem;
+            white-space: pre-wrap;
+        }
+
+        .log-error {
+            color: #ef4444;
+        }
+
+        .log-info {
+            color: #3b82f6;
+        }
+
+        .log-success {
+            color: #10b981;
+        }
+
+        .state-banner {
+            background-color: rgba(59, 130, 246, 0.1);
+            border: 1px dashed var(--core-color);
+            border-radius: 6px;
+            padding: 0.5rem;
+            font-size: 0.8125rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .state-banner.live {
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px dashed var(--live-color);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>CaRAG Demonstration Console</h1>
+            <div class="subtitle">Stateless Core Engine vs. Multi-tenant Live Layer</div>
+        </div>
+        <div style="font-size: 0.8125rem; color: var(--text-secondary);">
+            Verify running: Core (8000) & Live (8001)
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Core CaRAG Engine Column -->
+        <div class="column">
+            <div class="column-header">
+                <span class="column-title">1. Core CaRAG Engine Flow</span>
+                <span class="core-badge">Port 8000</span>
+            </div>
+
+            <div class="section-box">
+                <h3>Utility Checks</h3>
+                <div class="btn-group">
+                    <button class="btn-sec" onclick="callCore('/ping', 'GET')">Ping Engine</button>
+                    <button class="btn-sec" onclick="callCore('/documents', 'GET')">List Documents</button>
+                </div>
+            </div>
+
+            <div class="section-box">
+                <h3>Ingest PDF (Global Scope)</h3>
+                <form id="coreIngestForm" onsubmit="handleCoreUpload(event)">
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Select PDF Document</label>
+                        <input type="file" id="coreFile" accept="application/pdf" required style="color: var(--text-secondary); font-size: 0.8125rem;">
+                    </div>
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Optional Category Override</label>
+                        <input type="text" id="coreCategory" placeholder="e.g. Finance, Healthcare">
+                    </div>
+                    <button type="submit" class="btn-core">Upload & Index</button>
+                </form>
+            </div>
+
+            <div class="section-box">
+                <h3>Query Engine</h3>
+                <form id="coreQueryForm" onsubmit="handleCoreQuery(event)">
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Ask Question</label>
+                        <input type="text" id="coreQuestion" placeholder="e.g. What is the total budget?" required>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Filter by Document ID (Optional)</label>
+                        <input type="number" id="coreQueryDocId" placeholder="e.g. 1">
+                    </div>
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Filter by Category Name (Optional)</label>
+                        <input type="text" id="coreQueryCat" placeholder="e.g. general">
+                    </div>
+                    <button type="submit" class="btn-core">Ask Engine</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Live Multitenant Layer Column -->
+        <div class="column">
+            <div class="column-header">
+                <span class="column-title">2. Multi-tenant Live Layer Flow</span>
+                <span class="live-badge">Port 8001</span>
+            </div>
+
+            <!-- Token / Context state banner -->
+            <div class="state-banner live" id="liveState">
+                <div><strong>Token:</strong> <span id="lblToken" style="color: var(--live-color);">None</span></div>
+                <div><strong>Active Group ID:</strong> <span id="lblGroupId" style="color: var(--live-color);">None</span></div>
+            </div>
+
+            <div class="section-box">
+                <h3>1. User Authentication</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div class="form-row">
+                        <label>Email Address</label>
+                        <input type="text" id="liveEmail" value="demo@carag.com">
+                    </div>
+                    <div class="form-row">
+                        <label>Password</label>
+                        <input type="password" id="livePassword" value="securepassword123">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn-live" onclick="handleLiveRegister()">Register User</button>
+                    <button class="btn-live" onclick="handleLiveLogin()">Login & Obtain Token</button>
+                    <button class="btn-sec" onclick="callLive('/auth/mapping', 'GET')">Show User-Group Mappings</button>
+                </div>
+            </div>
+
+            <div class="section-box">
+                <h3>2. Context Setup (Groups)</h3>
+                <div class="form-row" style="margin-bottom: 0.5rem;">
+                    <label>Group Action</label>
+                    <div class="btn-group">
+                        <button class="btn-sec" onclick="callLive('/groups/', 'GET')">List My Groups</button>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; align-items: end;">
+                    <div class="form-row">
+                        <label>Group Name (to create)</label>
+                        <input type="text" id="liveGroupName" placeholder="e.g. Q3 Finance">
+                    </div>
+                    <button class="btn-live" onclick="handleCreateGroup()">Create Group</button>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; align-items: end; margin-top: 0.5rem;">
+                    <div class="form-row">
+                        <label>Target Group ID (to scope operations)</label>
+                        <input type="number" id="liveTargetGroupId" placeholder="e.g. 1" onchange="updateActiveGroup(this.value)">
+                    </div>
+                    <button class="btn-sec" onclick="handleGetGroupDetails()">Get Group Details</button>
+                </div>
+            </div>
+
+            <div class="section-box">
+                <h3>3. Scope-Isolated Document Upload</h3>
+                <form id="liveUploadForm" onsubmit="handleLiveUpload(event)">
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Select PDF Document</label>
+                        <input type="file" id="liveFile" accept="application/pdf" required style="color: var(--text-secondary); font-size: 0.8125rem;">
+                    </div>
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Category Tag</label>
+                        <input type="text" id="liveDocCategory" placeholder="e.g. Invoices">
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn-live">Upload to Group</button>
+                        <button type="button" class="btn-sec" onclick="handleListGroupDocs()">List Group Docs</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="section-box">
+                <h3>4. Scoped RAG Chat</h3>
+                <form id="liveChatForm" onsubmit="handleLiveChat(event)">
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Query (returns responses limited strictly to selected group)</label>
+                        <input type="text" id="liveChatQuestion" placeholder="Ask something about this group's files..." required>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: center; margin-bottom: 0.5rem;">
+                        <div class="form-row">
+                            <label>Top-K</label>
+                            <input type="number" id="liveChatTopK" value="5" min="1" max="100">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;">
+                            <input type="checkbox" id="liveBypassLlm" value="true">
+                            <label for="liveBypassLlm" style="cursor: pointer;">Bypass LLM calls (Zero-Token Mode)</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-live">Execute Scoped Chat</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logger Response Console -->
+    <div class="console-area">
+        <div class="console-header">
+            <span class="console-title">>_ API RUNTIME CONSOLE & LOGGING</span>
+            <button class="btn-sec" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="clearLogs()">Clear Output</button>
+        </div>
+        <div class="console-logs" id="consoleLogs">
+            <div class="log-entry log-info">[SYSTEM] Console Initialized. Select checks to start testing the REST APIs.</div>
+        </div>
+    </div>
+
+    <script>
+        const CORE_BASE = "http://localhost:8000";
+        const LIVE_BASE = "http://localhost:8001";
+        let activeToken = "";
+        let activeGroupId = null;
+
+        function log(message, type = "info") {
+            const logsDiv = document.getElementById("consoleLogs");
+            const entry = document.createElement("div");
+            entry.className = `log-entry log-${type}`;
+            
+            let displayMsg = typeof message === "object" ? JSON.stringify(message, null, 2) : message;
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${displayMsg}`;
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById("consoleLogs").innerHTML = "";
+        }
+
+        function updateActiveGroup(val) {
+            activeGroupId = val ? parseInt(val) : null;
+            document.getElementById("lblGroupId").innerText = activeGroupId || "None";
+            document.getElementById("lblGroupId").style.color = activeGroupId ? "#10b981" : "#94a3b8";
+        }
+
+        // =========================================================================
+        // CORE BACKEND CALLS
+        // =========================================================================
+        async function callCore(endpoint, method = "GET", body = null) {
+            const url = `${CORE_BASE}${endpoint}`;
+            log(`[CORE REQUEST] ${method} ${url}`, "info");
+            
+            try {
+                const config = {
+                    method: method,
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                };
+                if (body) {
+                    config.body = JSON.stringify(body);
+                }
+                const res = await fetch(url, config);
+                const data = await res.json();
+                
+                log(`[CORE RESPONSE - Status ${res.status}]`, "success");
+                log(data, "success");
+                return data;
+            } catch (err) {
+                log(`[CORE ERROR] ${err.message}`, "error");
+            }
+        }
+
+        async function handleCoreUpload(event) {
+            event.preventDefault();
+            const fileInput = document.getElementById("coreFile");
+            const catInput = document.getElementById("coreCategory");
+            
+            if (!fileInput.files.length) return;
+            
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            if (catInput.value) {
+                formData.append("category", catInput.value);
+            }
+
+            const url = `${CORE_BASE}/upload`;
+            log(`[CORE REQUEST] POST ${url} (Multipart/Form-Data)`, "info");
+            
+            try {
+                const res = await fetch(url, {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await res.json();
+                log(`[CORE RESPONSE - Status ${res.status}]`, "success");
+                log(data, "success");
+            } catch (err) {
+                log(`[CORE ERROR] ${err.message}`, "error");
+            }
+        }
+
+        async function handleCoreQuery(event) {
+            event.preventDefault();
+            const question = document.getElementById("coreQuestion").value;
+            const docId = document.getElementById("coreQueryDocId").value;
+            const category = document.getElementById("coreQueryCat").value;
+
+            const payload = { question: question };
+            if (docId) payload.document_id = parseInt(docId);
+            if (category) payload.category = category;
+
+            await callCore("/chat", "POST", payload);
+        }
+
+        // =========================================================================
+        // LIVE BACKEND CALLS
+        // =========================================================================
+        async function callLive(endpoint, method = "GET", body = null) {
+            const url = `${LIVE_BASE}${endpoint}`;
+            log(`[LIVE REQUEST] ${method} ${url}`, "info");
+
+            const headers = {};
+            if (activeToken) {
+                headers["Authorization"] = `Bearer ${activeToken}`;
+            }
+            if (!(body instanceof FormData)) {
+                headers["Content-Type"] = "application/json";
+            }
+
+            try {
+                const config = {
+                    method: method,
+                    headers: headers
+                };
+                if (body) {
+                    config.body = body instanceof FormData ? body : JSON.stringify(body);
+                }
+                const res = await fetch(url, config);
+                const data = await res.json();
+
+                log(`[LIVE RESPONSE - Status ${res.status}]`, "success");
+                log(data, "success");
+                return data;
+            } catch (err) {
+                log(`[LIVE ERROR] ${err.message}`, "error");
+            }
+        }
+
+        async function handleLiveRegister() {
+            const email = document.getElementById("liveEmail").value;
+            const password = document.getElementById("livePassword").value;
+            await callLive("/auth/register", "POST", { email, password });
+        }
+
+        async function handleLiveLogin() {
+            const email = document.getElementById("liveEmail").value;
+            const password = document.getElementById("livePassword").value;
+            
+            // Login uses urlencoded Form inputs per OAuth2 specifications in fastapi
+            const url = `${LIVE_BASE}/auth/login`;
+            log(`[LIVE REQUEST] POST ${url} (x-www-form-urlencoded)`, "info");
+
+            const details = {
+                'username': email,
+                'password': password
+            };
+
+            let formBody = [];
+            for (let property in details) {
+                let encodedKey = encodeURIComponent(property);
+                let encodedValue = encodeURIComponent(details[property]);
+                formBody.push(encodedKey + "=" + encodedValue);
+            }
+            formBody = formBody.join("&");
+
+            try {
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                    },
+                    body: formBody
+                });
+                const data = await res.json();
+                log(`[LIVE RESPONSE - Status ${res.status}]`, "success");
+                log(data, "success");
+
+                if (data.access_token) {
+                    activeToken = data.access_token;
+                    document.getElementById("lblToken").innerText = "Token Stored (Active)";
+                    document.getElementById("lblToken").style.color = "#10b981";
+                }
+            } catch (err) {
+                log(`[LIVE ERROR] ${err.message}`, "error");
+            }
+        }
+
+        async function handleCreateGroup() {
+            const name = document.getElementById("liveGroupName").value;
+            if (!name) return;
+            const group = await callLive("/groups/", "POST", { name });
+            if (group && group.id) {
+                document.getElementById("liveTargetGroupId").value = group.id;
+                updateActiveGroup(group.id);
+            }
+        }
+
+        async function handleGetGroupDetails() {
+            if (!activeGroupId) {
+                log("[WARNING] Please enter an Active Group ID first", "error");
+                return;
+            }
+            await callLive(`/groups/${activeGroupId}`, "GET");
+        }
+
+        async function handleLiveUpload(event) {
+            event.preventDefault();
+            if (!activeGroupId) {
+                log("[WARNING] Scoped Ingestion requires an Active Group ID!", "error");
+                return;
+            }
+            const fileInput = document.getElementById("liveFile");
+            const category = document.getElementById("liveDocCategory").value;
+
+            if (!fileInput.files.length) return;
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            if (category) {
+                formData.append("category", category);
+            }
+
+            await callLive(`/groups/${activeGroupId}/documents`, "POST", formData);
+        }
+
+        async function handleListGroupDocs() {
+            if (!activeGroupId) {
+                log("[WARNING] Scoped Operations require an Active Group ID", "error");
+                return;
+            }
+            await callLive(`/groups/${activeGroupId}/documents`, "GET");
+        }
+
+        async function handleLiveChat(event) {
+            event.preventDefault();
+            if (!activeGroupId) {
+                log("[WARNING] Scoped Chat requires an Active Group ID", "error");
+                return;
+            }
+            const question = document.getElementById("liveChatQuestion").value;
+            const topK = parseInt(document.getElementById("liveChatTopK").value);
+            const bypass = document.getElementById("liveBypassLlm").checked;
+
+            const payload = {
+                question: question,
+                top_k: topK
+            };
+            if (bypass) {
+                payload.bypass_llm = true;
+            }
+
+            await callLive(`/groups/${activeGroupId}/chat`, "POST", payload);
+        }
+    </script>
+</body>
+</html>
