@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CaRAG Core Engine Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --bg-card: #151f32;
+            --border-color: #2e3e59;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --core-color: #3b82f6;
+            --bg-input: #0f172a;
+            --font-main: 'Inter', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        header {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.25rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--core-color);
+        }
+        .subtitle { font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            flex: 1;
+        }
+        .panel {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .panel-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.75rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--core-color);
+        }
+        .section-box {
+            background-color: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+        .section-box h3 { font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+        .form-row { display: flex; flex-direction: column; gap: 0.35rem; }
+        label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; }
+        input[type="text"], input[type="number"], select {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.5rem;
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: 0.875rem;
+            outline: none;
+        }
+        input[type="text"]:focus, input[type="number"]:focus, select:focus { border-color: var(--core-color); }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        button {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: none;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        .btn-primary { background-color: var(--core-color); color: white; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-sec { background-color: transparent; border: 1px solid var(--border-color); color: var(--text-primary); }
+        
+        .console-area {
+            background-color: #020617;
+            border-top: 1px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            height: 280px;
+        }
+        .console-header { display: flex; justify-content: space-between; align-items: center; }
+        .console-title { font-size: 0.875rem; font-weight: 600; color: var(--core-color); font-family: var(--font-code); }
+        .console-logs {
+            flex: 1;
+            overflow-y: auto;
+            font-family: var(--font-code);
+            font-size: 0.8125rem;
+            color: #38bdf8;
+            background-color: #020617;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+        .log-entry { margin-bottom: 0.4rem; white-space: pre-wrap; line-height: 1.4; }
+        .log-error { color: #f87171; }
+        .log-success { color: #4ade80; }
+        .log-info { color: #38bdf8; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>CaRAG Core Backend Interface</h1>
+            <div class="subtitle">Architecture Ingestion & Standalone RAG Verification Environment</div>
+        </div>
+        <a href="demo_live.html" style="color: #10b981; font-weight: 600; font-size: 0.875rem; text-decoration: none; border: 1px solid #10b981; padding: 0.4rem 0.8rem; border-radius: 6px; transition: background 0.2s;">
+            Switch to Live Layer (Port 8001) →
+        </a>
+    </header>
+
+    <div class="grid-container">
+        <!-- Document Operations Panel -->
+        <div class="panel">
+            <div class="panel-header">Document & System Operations</div>
+
+            <!-- Ingestion Test Area -->
+            <div class="section-box">
+                <h3>Document Ingestion (POST /upload)</h3>
+                <form id="uploadForm" onsubmit="handleUpload(event)">
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Select PDF Document</label>
+                        <input type="file" id="coreFile" accept="application/pdf" required style="color: var(--text-secondary); font-size: 0.8125rem;">
+                    </div>
+                    <div class="form-row" style="margin-bottom: 0.75rem;">
+                        <label>Category Attribute</label>
+                        <input type="text" id="coreCategory" placeholder="e.g. engineering, engineering, jio, or leave blank to trigger Gemini auto-categorizer">
+                    </div>
+                    <button type="submit" class="btn-primary">Upload & Process</button>
+                </form>
+            </div>
+
+            <!-- Fetch Metadata -->
+            <div class="section-box">
+                <h3>Retrieve Document Details (GET)</h3>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end;">
+                    <div class="form-row">
+                        <label>Document ID</label>
+                        <input type="number" id="docDetailsId" placeholder="e.g. 1" min="1">
+                    </div>
+                    <button class="btn-sec" onclick="getDocumentDetails()">Get Metadata</button>
+                </div>
+                <div class="btn-group" style="margin-top: 0.5rem;">
+                    <button class="btn-sec" onclick="callApi('/documents', 'GET')">List All Documents (GET /documents)</button>
+                </div>
+            </div>
+
+            <!-- Patch Status -->
+            <div class="section-box">
+                <h3>Manually Modify Status (PATCH /documents/{id})</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: end;">
+                    <div class="form-row">
+                        <label>Document ID</label>
+                        <input type="number" id="patchDocId" placeholder="1" min="1">
+                    </div>
+                    <div class="form-row">
+                        <label>Target Status</label>
+                        <select id="patchStatus">
+                            <option value="ready">ready</option>
+                            <option value="uploaded">uploaded</option>
+                            <option value="processing">processing</option>
+                            <option value="failed">failed</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" onclick="patchDocStatus()">Patch</button>
+                </div>
+            </div>
+
+            <!-- Deletions -->
+            <div class="section-box">
+                <h3>Cleanup & Maintenance (DELETE / POST)</h3>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; margin-bottom: 0.5rem;">
+                    <div class="form-row">
+                        <label>Document ID to Delete</label>
+                        <input type="number" id="deleteDocId" placeholder="1" min="1">
+                    </div>
+                    <button class="btn-danger" onclick="deleteDocument()">Delete File</button>
+                </div>
+                <div class="btn-group" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                    <button class="btn-danger" onclick="systemReset()">System Reset (DELETE /documents)</button>
+                    <button class="btn-sec" onclick="callApi('/debug/db', 'GET')">Get Database Metrics</button>
+                    <button class="btn-sec" onclick="callApi('/clean-system', 'POST')">Force Clean System Memory</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RAG Chat Operations Panel -->
+        <div class="panel">
+            <div class="panel-header">Standalone RAG Query Testing</div>
+
+            <div class="section-box">
+                <h3>RAG Query Configuration (POST /chat)</h3>
+                <form id="queryForm" onsubmit="handleQuery(event)">
+                    <div class="form-row" style="margin-bottom: 0.75rem;">
+                        <label>Question</label>
+                        <input type="text" id="chatQuestion" placeholder="e.g. What is the combustion pressure?" required>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+                        <div class="form-row">
+                            <label>Document ID Filter (Mode A)</label>
+                            <input type="number" id="chatDocId" placeholder="e.g. 1 (Leave empty for Category/Global)">
+                        </div>
+                        <div class="form-row">
+                            <label>Category Filter (Mode B)</label>
+                            <input type="text" id="chatCategory" placeholder="e.g. engineering (Leave empty for Doc/Global)">
+                        </div>
+                    </div>
+
+                    <div class="form-row" style="margin-bottom: 1rem;">
+                        <label>Top-K Results Limit (Context Volume)</label>
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <input type="range" id="chatTopK" min="1" max="100" value="5" oninput="document.getElementById('topKVal').innerText = this.value" style="flex: 1; accent-color: var(--core-color);">
+                            <span id="topKVal" style="font-family: var(--font-code); font-size: 0.875rem; min-width: 25px;">5</span>
+                        </div>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary" style="flex: 1;">Execute Chat Request</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Quick Scenario Triggers -->
+            <div class="section-box">
+                <h3>Pre-defined Test Scenarios</h3>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn-sec" style="text-align: left;" onclick="triggerScenario('global')">
+                        🌐 <strong>Scenario 1: Global Search (Mode C Fallback)</strong><br>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Searches entire vector space (doc_id: null, category: null)</span>
+                    </button>
+                    <button class="btn-sec" style="text-align: left;" onclick="triggerScenario('category')">
+                        📂 <strong>Scenario 2: Category Pinned Search (Mode B)</strong><br>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Searches only category "engineering" (category: "engineering", doc_id: null)</span>
+                    </button>
+                    <button class="btn-sec" style="text-align: left;" onclick="triggerScenario('document')">
+                        📄 <strong>Scenario 3: Document Pinned Search (Mode A)</strong><br>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Restricts semantic search strictly to document ID 1 (doc_id: 1, category: null)</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="btn-group" style="margin-top: auto;">
+                <button class="btn-sec" onclick="callApi('/ping', 'GET')">Core Ping Check</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Response logs -->
+    <div class="console-area">
+        <div class="console-header">
+            <span class="console-title">>_ CORE RUNTIME EXECUTION OUTPUT & API RESPONSES</span>
+            <button class="btn-sec" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="clearLogs()">Clear Console</button>
+        </div>
+        <div class="console-logs" id="consoleLogs">
+            <div class="log-entry log-info">[SYSTEM] Core Engine console ready. Server targeted: http://localhost:8000</div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = "http://localhost:8000";
+
+        function log(message, type = "info") {
+            const logsDiv = document.getElementById("consoleLogs");
+            const entry = document.createElement("div");
+            entry.className = `log-entry log-${type}`;
+            
+            let displayMsg = typeof message === "object" ? JSON.stringify(message, null, 2) : message;
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${displayMsg}`;
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById("consoleLogs").innerHTML = "";
+        }
+
+        async function callApi(endpoint, method = "GET", body = null) {
+            const url = `${BASE_URL}${endpoint}`;
+            log(`[REQUEST] ${method} ${url}`, "info");
+
+            try {
+                const config = {
+                    method: method,
+                    headers: { "Content-Type": "application/json" }
+                };
+                if (body) {
+                    config.body = JSON.stringify(body);
+                }
+                const res = await fetch(url, config);
+                const data = await res.json();
+                
+                log(`[RESPONSE - Status ${res.status}]`, "success");
+                log(data, "success");
+                return data;
+            } catch (err) {
+                log(`[API ERROR] ${err.message}`, "error");
+            }
+        }
+
+        async function handleUpload(event) {
+            event.preventDefault();
+            const fileInput = document.getElementById("coreFile");
+            const categoryInput = document.getElementById("coreCategory");
+
+            if (!fileInput.files.length) return;
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            
+            const catVal = categoryInput.value.trim();
+            if (catVal) {
+                formData.append("category", catVal);
+            }
+
+            const url = `${BASE_URL}/upload`;
+            log(`[REQUEST] POST ${url} (Multipart Form)`, "info");
+
+            try {
+                const res = await fetch(url, {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    log(`[UPLOAD SUCCESS - Status ${res.status}]`, "success");
+                    log(data, "success");
+                } else {
+                    log(`[UPLOAD FAIL - Status ${res.status}]`, "error");
+                    log(data, "error");
+                }
+            } catch (err) {
+                log(`[API ERROR] ${err.message}`, "error");
+            }
+        }
+
+        async function getDocumentDetails() {
+            const docId = document.getElementById("docDetailsId").value;
+            if (!docId) {
+                log("[WARNING] Document ID required", "error");
+                return;
+            }
+            await callApi(`/documents/${docId}`, "GET");
+        }
+
+        async function patchDocStatus() {
+            const docId = document.getElementById("patchDocId").value;
+            const status = document.getElementById("patchStatus").value;
+            if (!docId) {
+                log("[WARNING] Document ID required for patching status", "error");
+                return;
+            }
+            await callApi(`/documents/${docId}`, "PATCH", { status: status });
+        }
+
+        async function deleteDocument() {
+            const docId = document.getElementById("deleteDocId").value;
+            if (!docId) {
+                log("[WARNING] Document ID required for deletion", "error");
+                return;
+            }
+            await callApi(`/documents/${docId}`, "DELETE");
+        }
+
+        async function systemReset() {
+            if (confirm("Are you sure you want to trigger a full system reset? This drops Milvus collections and clears all DB records!")) {
+                await callApi("/documents", "DELETE");
+            }
+        }
+
+        async function handleQuery(event) {
+            event.preventDefault();
+            const question = document.getElementById("chatQuestion").value;
+            const docIdVal = document.getElementById("chatDocId").value;
+            const catVal = document.getElementById("chatCategory").value.trim();
+            const topK = parseInt(document.getElementById("chatTopK").value);
+
+            const payload = {
+                question: question,
+                top_k: topK,
+                document_id: docIdVal ? parseInt(docIdVal) : null,
+                category: catVal ? catVal : null
+            };
+
+            await callApi("/chat", "POST", payload);
+        }
+
+        function triggerScenario(type) {
+            const qInput = document.getElementById("chatQuestion");
+            const docIdInput = document.getElementById("chatDocId");
+            const catInput = document.getElementById("chatCategory");
+
+            qInput.value = "What is the key metric mentioned?";
+            
+            if (type === 'global') {
+                docIdInput.value = "";
+                catInput.value = "";
+                log("[SCENARIO] Configured for Mode C (Global Scope - search entire space)", "info");
+            } else if (type === 'category') {
+                docIdInput.value = "";
+                catInput.value = "engineering";
+                log("[SCENARIO] Configured for Mode B (Category Scope - pinned to 'engineering')", "info");
+            } else if (type === 'document') {
+                docIdInput.value = "1";
+                catInput.value = "";
+                log("[SCENARIO] Configured for Mode A (Document Scope - pinned to document 1)", "info");
+            }
+        }
+    </script>
+</body>
+</html>
