@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from . import models
 from .database import sessionLocal
 from .milvus_store import milvus_store
+from .bm25_store import bm25_store
 
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
@@ -30,6 +31,38 @@ EMBEDDING_MODEL_INSTANCE = SentenceTransformer(
 CROSS_ENCODER_INSTANCE = CrossEncoder(
     CROSS_ENCODER_MODEL
 )
+
+
+def reciprocal_rank_fusion(*lists_of_hits, k=60):
+    """
+    Fuses multiple ranked lists of hits using Reciprocal Rank Fusion (RRF).
+    `lists_of_hits` is an iterable of hit lists (e.g. from Milvus and BM25).
+    """
+    fused_scores = {}
+    hit_map = {}
+    
+    for hit_list in lists_of_hits:
+        for rank, hit in enumerate(hit_list):
+            doc_id = hit["document_id"]
+            chunk_idx = hit["chunk_index"]
+            key = f"{doc_id}_{chunk_idx}"
+            
+            if key not in hit_map:
+                hit_map[key] = hit
+                fused_scores[key] = 0.0
+                
+            fused_scores[key] += 1.0 / (k + rank + 1)
+            
+    # Sort hits by their fused RRF score
+    sorted_keys = sorted(fused_scores.keys(), key=lambda k: fused_scores[k], reverse=True)
+    
+    fused_hits = []
+    for key in sorted_keys:
+        hit = hit_map[key].copy()
+        hit["score"] = fused_scores[key] # overwrite original score with RRF score
+        fused_hits.append(hit)
+        
+    return fused_hits
 
 
 def _extract_text_from_pdf(file_path: str) -> str:
@@ -442,7 +475,9 @@ async def answer_question(question: str, document_id: int | None = None, categor
                     "citations": []
                 }
             search_k = max(15, top_k * 3)
-            hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_id=document_id)
+            milvus_hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_id=document_id)
+            bm25_hits = bm25_store.search(query=question, top_k=search_k, document_id=document_id)
+            hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
 
         # 2. Bypass check - Specific Category Filter
         elif category is not None:
@@ -453,7 +488,9 @@ async def answer_question(question: str, document_id: int | None = None, categor
             doc_ids = [r[0] for r in doc_ids_query]
             search_k = max(15, top_k * 3)
             if doc_ids:
-                hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_ids=doc_ids)
+                milvus_hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_ids=doc_ids)
+                bm25_hits = bm25_store.search(query=question, top_k=search_k, document_ids=doc_ids)
+                hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
             else:
                 hits = []
 
@@ -470,7 +507,9 @@ async def answer_question(question: str, document_id: int | None = None, categor
             # Confidence-Score Fallback (or if no category summaries exist)
             if not matches or matches[0]["score"] < 0.35:
                 print(f"Bypassing categorical routing (Top score: {matches[0]['score'] if matches else 'None'} < 0.35). Global search initiated.")
-                hits = milvus_store.search(query_embedding=query_vector, top_k=search_k)
+                milvus_hits = milvus_store.search(query_embedding=query_vector, top_k=search_k)
+                bm25_hits = bm25_store.search(query=question, top_k=search_k)
+                hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
             else:
                 # LLM Routing (LLM Call 1)
                 from . import llm_service
@@ -499,11 +538,15 @@ async def answer_question(question: str, document_id: int | None = None, categor
                 ).all()
                 doc_ids = [r[0] for r in doc_ids_query]
                 if doc_ids:
-                    hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_ids=doc_ids)
+                    milvus_hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_ids=doc_ids)
+                    bm25_hits = bm25_store.search(query=question, top_k=search_k, document_ids=doc_ids)
+                    hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
                 else:
                     # In case documents in chosen category are not found/ready, fallback to global
                     print(f"No documents ready in category '{chosen_category}'. Bypassing category filter.")
-                    hits = milvus_store.search(query_embedding=query_vector, top_k=search_k)
+                    milvus_hits = milvus_store.search(query_embedding=query_vector, top_k=search_k)
+                    bm25_hits = bm25_store.search(query=question, top_k=search_k)
+                    hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
 
     finally:
         db.close()
@@ -517,7 +560,7 @@ async def answer_question(question: str, document_id: int | None = None, categor
     # =========================================================================
     # STAGE 2: CROSS-ENCODER RERANKING
     # =========================================================================
-    print(f"\n[RERANKING] Scoring {len(hits)} initial hits from Milvus...")
+    print(f"\n[RERANKING] Scoring {len(hits)} initial hybrid hits...")
     
     # 1. Prepare pairs of (query, chunk_content)
     cross_input = [[question, hit["content"]] for hit in hits]

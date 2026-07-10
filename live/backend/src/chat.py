@@ -58,7 +58,7 @@ async def group_chat(
         )
 
     try:
-        from src.services import _embed_query, CROSS_ENCODER_INSTANCE
+        from src.services import _embed_query, CROSS_ENCODER_INSTANCE, reciprocal_rank_fusion, bm25_store
         from src.llm_service import generate_answer, classify_query_category
         query_vector = _embed_query(payload.question)
         hits = []
@@ -78,11 +78,17 @@ async def group_chat(
                     citations=[],
                 )
             search_k = max(15, payload.top_k * 3)
-            hits = milvus_store.search(
+            milvus_hits = milvus_store.search(
                 query_embedding=query_vector,
                 top_k=search_k,
                 document_id=payload.document_id,  # single-doc Milvus filter
             )
+            bm25_hits = bm25_store.search(
+                query=payload.question,
+                top_k=search_k,
+                document_id=payload.document_id,
+            )
+            hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
 
         # ── MODE B: User manually selected a category ────────────────────────────
         # User picked from the list returned by GET /groups/{id}/categories.
@@ -104,11 +110,17 @@ async def group_chat(
                     citations=[],
                 )
             search_k = max(15, payload.top_k * 3)
-            hits = milvus_store.search(
+            milvus_hits = milvus_store.search(
                 query_embedding=query_vector,
                 top_k=search_k,
                 document_ids=category_doc_ids,
             )
+            bm25_hits = bm25_store.search(
+                query=payload.question,
+                top_k=search_k,
+                document_ids=category_doc_ids,
+            )
+            hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
 
         # ── MODE C: Automatic 2-stage categorical routing (default) ─────────────
         # No manual override — engine figures out the best category automatically.
@@ -123,11 +135,17 @@ async def group_chat(
             if not category_matches or category_matches[0]["score"] < 0.35:
                 print(f"Low category confidence. Running flat search across group {group_id}.")
                 search_k = max(15, payload.top_k * 3)
-                hits = milvus_store.search(
+                milvus_hits = milvus_store.search(
                     query_embedding=query_vector,
                     top_k=search_k,
                     document_ids=group_doc_ids,
                 )
+                bm25_hits = bm25_store.search(
+                    query=payload.question,
+                    top_k=search_k,
+                    document_ids=group_doc_ids,
+                )
+                hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
             else:
                 # STEP 4: LLM routing — cheap classification call, returns category name
                 try:
@@ -159,11 +177,18 @@ async def group_chat(
                     ).all()
                 ]
                 search_k = max(15, payload.top_k * 3)
-                hits = milvus_store.search(
+                target_ids = scoped_ids if scoped_ids else group_doc_ids
+                milvus_hits = milvus_store.search(
                     query_embedding=query_vector,
                     top_k=search_k,
-                    document_ids=scoped_ids if scoped_ids else group_doc_ids,
+                    document_ids=target_ids,
                 )
+                bm25_hits = bm25_store.search(
+                    query=payload.question,
+                    top_k=search_k,
+                    document_ids=target_ids,
+                )
+                hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
 
         if not hits:
             return schemas.ChatResponse(
@@ -172,7 +197,7 @@ async def group_chat(
             )
 
         # ── STAGE 2: CROSS-ENCODER RERANKING ────────────────────────────────────
-        print(f"\n[RERANKING] Scoring {len(hits)} initial hits from Milvus (Group {group_id})...")
+        print(f"\n[RERANKING] Scoring {len(hits)} initial hybrid hits (Group {group_id})...")
         
         # 1. Prepare pairs of (query, chunk_content)
         cross_input = [[payload.question, hit["content"]] for hit in hits]
