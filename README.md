@@ -10,7 +10,7 @@ Honestly? I was just brushing up my RAG skills. Nothing grand. No product vision
 
 Then two things happened at the same time.
 
-My mate **[Jayneel Mahival](https://github.com/jayneelmahival)** started throwing ideas at me (shoutout bro, this thing exists partly because of your relentless "but what if we also..." energy). And I stumbled on [this Medium article](https://medium.com/@visrow/how-to-design-a-rag-pipeline-for-10-million-documents-with-zero-hallucination-live-demo-057e37bcdbf6) about designing a zero-hallucination RAG pipeline at 10M document scale.
+My mate **[Jayneel Mahival](https://github.com/hyper099)** started throwing ideas at me (shoutout bro, this thing exists partly because of your relentless "but what if we also..." energy). And I stumbled on [this Medium article](https://medium.com/@visrow/how-to-design-a-rag-pipeline-for-10-million-documents-with-zero-hallucination-live-demo-057e37bcdbf6) about designing a zero-hallucination RAG pipeline at 10M document scale.
 
 That article broke my brain a little. In a good way.
 
