@@ -22,6 +22,11 @@ EMBEDDING_MODEL = os.getenv(
     "sentence-transformers/all-MiniLM-L6-v2"
 )
 
+CROSS_ENCODER_MODEL = os.getenv(
+    "CROSS_ENCODER_MODEL",
+    "cross-encoder/ms-marco-MiniLM-L-6-v2"
+)
+
 EMBEDDING_DIM = int(
     os.getenv(
         "EMBEDDING_DIM",

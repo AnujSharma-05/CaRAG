@@ -1,7 +1,7 @@
 import asyncio
 import os
 from typing import Any
-from .config import EMBEDDING_MODEL
+from .config import EMBEDDING_MODEL, CROSS_ENCODER_MODEL
 
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ from . import models
 from .database import sessionLocal
 from .milvus_store import milvus_store
 
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 
 from .llm_service import generate_answer
 from .config import (
@@ -25,6 +25,10 @@ from pypdf import PdfReader
 
 EMBEDDING_MODEL_INSTANCE = SentenceTransformer(
     EMBEDDING_MODEL
+)
+
+CROSS_ENCODER_INSTANCE = CrossEncoder(
+    CROSS_ENCODER_MODEL
 )
 
 
@@ -437,7 +441,8 @@ async def answer_question(question: str, document_id: int | None = None, categor
                     "answer": f"The selected document is not ready yet (current status: {doc.status}).",
                     "citations": []
                 }
-            hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)), document_id=document_id)
+            search_k = max(15, top_k * 3)
+            hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_id=document_id)
 
         # 2. Bypass check - Specific Category Filter
         elif category is not None:
@@ -446,8 +451,9 @@ async def answer_question(question: str, document_id: int | None = None, categor
                 models.Document.status == "ready"
             ).all()
             doc_ids = [r[0] for r in doc_ids_query]
+            search_k = max(15, top_k * 3)
             if doc_ids:
-                hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)), document_ids=doc_ids)
+                hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_ids=doc_ids)
             else:
                 hits = []
 
@@ -460,10 +466,11 @@ async def answer_question(question: str, document_id: int | None = None, categor
                 print("Milvus search_categories failed:", exc)
                 matches = []
 
+            search_k = max(15, top_k * 3)
             # Confidence-Score Fallback (or if no category summaries exist)
             if not matches or matches[0]["score"] < 0.35:
                 print(f"Bypassing categorical routing (Top score: {matches[0]['score'] if matches else 'None'} < 0.35). Global search initiated.")
-                hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)))
+                hits = milvus_store.search(query_embedding=query_vector, top_k=search_k)
             else:
                 # LLM Routing (LLM Call 1)
                 from . import llm_service
@@ -492,35 +499,52 @@ async def answer_question(question: str, document_id: int | None = None, categor
                 ).all()
                 doc_ids = [r[0] for r in doc_ids_query]
                 if doc_ids:
-                    hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)), document_ids=doc_ids)
+                    hits = milvus_store.search(query_embedding=query_vector, top_k=search_k, document_ids=doc_ids)
                 else:
                     # In case documents in chosen category are not found/ready, fallback to global
                     print(f"No documents ready in category '{chosen_category}'. Bypassing category filter.")
-                    hits = milvus_store.search(query_embedding=query_vector, top_k=max(1, min(top_k, 100)))
+                    hits = milvus_store.search(query_embedding=query_vector, top_k=search_k)
 
     finally:
         db.close()
-
-    print("\n========== RETRIEVED CHUNKS ==========")
-
-    for idx, hit in enumerate(hits):
-        print(
-            f"\nChunk {idx+1}"
-        )
-        safe_content = hit["content"][:300].encode('ascii', errors='replace').decode('ascii')
-        print(
-            safe_content
-        )
-
-    print(
-        "\n====================================="
-    )
 
     if not hits:
         return {
             "answer": "The provided documents do not contain sufficient information to answer this question.",
             "citations": [],
         }
+
+    # =========================================================================
+    # STAGE 2: CROSS-ENCODER RERANKING
+    # =========================================================================
+    print(f"\n[RERANKING] Scoring {len(hits)} initial hits from Milvus...")
+    
+    # 1. Prepare pairs of (query, chunk_content)
+    cross_input = [[question, hit["content"]] for hit in hits]
+    
+    # 2. Score them all jointly
+    scores = CROSS_ENCODER_INSTANCE.predict(cross_input)
+    
+    # 3. Update the hits with the new score
+    for idx, hit in enumerate(hits):
+        hit["cross_score"] = float(scores[idx])
+        
+    # 4. Sort descending by the cross-encoder score
+    hits.sort(key=lambda x: x["cross_score"], reverse=True)
+    
+    # 5. Take top-k and optionally enforce confidence threshold
+    # The MS MARCO cross encoder outputs logits (un-normalized). 
+    # Usually a score > 0 indicates relevance, but we'll just take the top-k for now.
+    hits = hits[:top_k]
+
+    print("\n========== FINAL RERANKED CHUNKS ==========")
+
+    for idx, hit in enumerate(hits):
+        print(f"\nChunk {idx+1} (Cross-Score: {hit['cross_score']:.4f}, Vector-Score: {hit['score']:.4f})")
+        safe_content = hit["content"][:300].encode('ascii', errors='replace').decode('ascii')
+        print(safe_content)
+
+    print("\n===========================================")
 
     citations = [
         {
