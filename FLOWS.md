@@ -206,7 +206,9 @@ sequenceDiagram
         alt Document not found or not ready
             API-->>User: 404 / "Document not ready"
         end
-        API->>MV: milvus_store.search(query_embedding, top_k, document_id=doc_id)
+        API->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_id=doc_id)
+        API->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_id=doc_id)
+        API->>API: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
         Note over API: Bypasses all category routing — single doc scope
 
     %% ── Mode B: Explicit Category Filter ──
@@ -215,7 +217,9 @@ sequenceDiagram
         alt No ready docs in that category
             API-->>User: Empty hits → "No info in that category"
         end
-        API->>MV: milvus_store.search(query_embedding, top_k, document_ids=doc_ids)
+        API->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_ids=doc_ids)
+        API->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_ids=doc_ids)
+        API->>API: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
         Note over API: Scoped to all docs in chosen category
 
     %% ── Mode C: Auto 2-Stage Categorical Routing (default) ──
@@ -224,7 +228,9 @@ sequenceDiagram
         
         alt Category score < 0.35 OR no category summaries exist  [Confidence Fallback]
             Note over API: Low confidence — skipping category routing
-            API->>MV: milvus_store.search(query_embedding, top_k)  [global flat search]
+            API->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3)
+            API->>BM25: bm25_hits = bm25_store.search(question, top_k*3)
+            API->>API: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
         else Category score >= 0.35  [2-Stage Routing Activated]
 
             alt bypass_llm=false
@@ -245,12 +251,21 @@ sequenceDiagram
             API->>PG: Query Document.id WHERE Category.name=chosen_category AND status="ready"
 
             alt No ready docs in chosen category
-                API->>MV: milvus_store.search(query_embedding, top_k)  [global fallback]
+                API->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3)  [global fallback]
+                API->>BM25: bm25_hits = bm25_store.search(question, top_k*3)
+                API->>API: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
             else Scoped docs found
-                API->>MV: milvus_store.search(query_embedding, top_k, document_ids=scoped_ids)
+                API->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_ids=scoped_ids)
+                API->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_ids=scoped_ids)
+                API->>API: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
             end
         end
     end
+
+    %% ── Stage 2: Cross-Encoder Reranking ──
+    Note over API: ── STAGE 2: CROSS-ENCODER RERANKING ──
+    API->>API: scores = CrossEncoder.predict([query, chunk] for chunk in hits)
+    API->>API: Sort hits descending by scores, keep top_k
 
     %% ── Answer Synthesis ──
     Note over API,GEM: ── LLM Call 2: Answer Synthesis ──
@@ -513,7 +528,9 @@ sequenceDiagram
         alt Document not in this group or not ready
             LIVE-->>Client: "That document doesn't exist in this group or isn't ready yet"
         end
-        LIVE->>MV: milvus_store.search(query_embedding, top_k, document_id=payload.document_id)
+        LIVE->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_id=payload.document_id)
+        LIVE->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_id=payload.document_id)
+        LIVE->>LIVE: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
 
     %% ── Mode B: Manual category filter ──
     else category provided  [Mode B — Category scope within group]
@@ -522,7 +539,9 @@ sequenceDiagram
         alt No ready docs in that category for this group
             LIVE-->>Client: "No ready documents in that category within this group"
         end
-        LIVE->>MV: milvus_store.search(query_embedding, top_k, document_ids=category_doc_ids)
+        LIVE->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_ids=category_doc_ids)
+        LIVE->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_ids=category_doc_ids)
+        LIVE->>LIVE: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
 
     %% ── Mode C: Automatic 2-stage routing ──
     else No override  [Mode C — Automatic categorical routing within group]
@@ -531,7 +550,9 @@ sequenceDiagram
 
         alt Top category score < 0.35 OR no categories exist  [Confidence Fallback]
             Note over LIVE: Low confidence — skipping category routing
-            LIVE->>MV: milvus_store.search(query_embedding, top_k, document_ids=group_doc_ids)
+            LIVE->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_ids=group_doc_ids)
+            LIVE->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_ids=group_doc_ids)
+            LIVE->>LIVE: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
             Note over MV: Still bounded to group's documents — no global search
 
         else Top score >= 0.35  [2-Stage Routing Activated]
@@ -549,13 +570,22 @@ sequenceDiagram
             Note over LIVE: Intersection: group_id ∩ chosen_category — tightest possible scope
 
             alt No docs ready in chosen category within group
-                LIVE->>MV: milvus_store.search(query_embedding, top_k, document_ids=group_doc_ids)
+                LIVE->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_ids=group_doc_ids)
+                LIVE->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_ids=group_doc_ids)
+                LIVE->>LIVE: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
                 Note over MV: Fallback to group-wide flat search — still group-isolated
             else Scoped docs found
-                LIVE->>MV: milvus_store.search(query_embedding, top_k, document_ids=scoped_ids)
+                LIVE->>MV: milvus_hits = milvus_store.search(query_embedding, top_k*3, document_ids=scoped_ids)
+                LIVE->>BM25: bm25_hits = bm25_store.search(question, top_k*3, document_ids=scoped_ids)
+                LIVE->>LIVE: hits = reciprocal_rank_fusion(milvus_hits, bm25_hits)
             end
         end
     end
+
+    %% ── Stage 2: Cross-Encoder Reranking ──
+    Note over LIVE: ── STAGE 2: CROSS-ENCODER RERANKING ──
+    LIVE->>LIVE: scores = CROSS_ENCODER.predict([query, chunk] for chunk in hits)
+    LIVE->>LIVE: Sort hits descending by cross_score, keep top_k
 
     %% ── Answer Synthesis ──
     Note over LIVE,GEM: ── LLM Call 2: Answer Synthesis ──
