@@ -58,7 +58,7 @@ async def group_chat(
         )
 
     try:
-        from src.services import _embed_query
+        from src.services import _embed_query, CROSS_ENCODER_INSTANCE
         from src.llm_service import generate_answer, classify_query_category
         query_vector = _embed_query(payload.question)
         hits = []
@@ -77,9 +77,10 @@ async def group_chat(
                     answer="That document doesn't exist in this group or isn't ready yet.",
                     citations=[],
                 )
+            search_k = max(15, payload.top_k * 3)
             hits = milvus_store.search(
                 query_embedding=query_vector,
-                top_k=max(1, min(payload.top_k, 100)),
+                top_k=search_k,
                 document_id=payload.document_id,  # single-doc Milvus filter
             )
 
@@ -102,9 +103,10 @@ async def group_chat(
                     answer=f"No ready documents found in category '{payload.category}' within this group.",
                     citations=[],
                 )
+            search_k = max(15, payload.top_k * 3)
             hits = milvus_store.search(
                 query_embedding=query_vector,
-                top_k=max(1, min(payload.top_k, 100)),
+                top_k=search_k,
                 document_ids=category_doc_ids,
             )
 
@@ -120,9 +122,10 @@ async def group_chat(
             # STEP 3: Confidence gate — flat search if no strong category match
             if not category_matches or category_matches[0]["score"] < 0.35:
                 print(f"Low category confidence. Running flat search across group {group_id}.")
+                search_k = max(15, payload.top_k * 3)
                 hits = milvus_store.search(
                     query_embedding=query_vector,
-                    top_k=max(1, min(payload.top_k, 100)),
+                    top_k=search_k,
                     document_ids=group_doc_ids,
                 )
             else:
@@ -155,9 +158,10 @@ async def group_chat(
                         models.Document.status == "ready",
                     ).all()
                 ]
+                search_k = max(15, payload.top_k * 3)
                 hits = milvus_store.search(
                     query_embedding=query_vector,
-                    top_k=max(1, min(payload.top_k, 100)),
+                    top_k=search_k,
                     document_ids=scoped_ids if scoped_ids else group_doc_ids,
                 )
 
@@ -166,6 +170,32 @@ async def group_chat(
                 answer="The group's documents don't contain enough information to answer this question.",
                 citations=[],
             )
+
+        # ── STAGE 2: CROSS-ENCODER RERANKING ────────────────────────────────────
+        print(f"\n[RERANKING] Scoring {len(hits)} initial hits from Milvus (Group {group_id})...")
+        
+        # 1. Prepare pairs of (query, chunk_content)
+        cross_input = [[payload.question, hit["content"]] for hit in hits]
+        
+        # 2. Score them all jointly
+        scores = CROSS_ENCODER_INSTANCE.predict(cross_input)
+        
+        # 3. Update the hits with the new score
+        for idx, hit in enumerate(hits):
+            hit["cross_score"] = float(scores[idx])
+            
+        # 4. Sort descending by the cross-encoder score
+        hits.sort(key=lambda x: x["cross_score"], reverse=True)
+        
+        # 5. Take top-k 
+        hits = hits[:payload.top_k]
+
+        print("\n========== FINAL RERANKED CHUNKS ==========")
+        for idx, hit in enumerate(hits):
+            print(f"\nChunk {idx+1} (Cross-Score: {hit['cross_score']:.4f}, Vector-Score: {hit['score']:.4f})")
+            safe_content = hit["content"][:300].encode('ascii', errors='replace').decode('ascii')
+            print(safe_content)
+        print("\n===========================================")
 
         # ── STEP 6: Build Response ───────────────────────────────────────────────
         citations = [
