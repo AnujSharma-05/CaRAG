@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CaRAG Live Multi-Tenant Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --live-color: #56d364;
+            --live-color-glow: rgba(86, 211, 100, 0.15);
+            --accent-warning: #e3b341;
+            --bg-input: #0d1117;
+            --font-main: 'Inter', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        header {
+            background: #161b22;
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 75px;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--live-color);
+        }
+        .subtitle { font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.25rem; }
+        
+        .main-layout {
+            display: flex;
+            height: calc(100vh - 75px);
+            flex: 1;
+            overflow: hidden;
+        }
+        .left-pane {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.75rem;
+        }
+        .right-pane {
+            width: 45%;
+            height: 100%;
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            background-color: #0d1117;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .section-box {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .section-box:hover {
+            border-color: var(--live-color);
+        }
+        .section-box h3 { 
+            font-size: 0.875rem; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 0.08em; 
+            color: var(--live-color); 
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .form-row { display: flex; flex-direction: column; gap: 0.4rem; }
+        label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+        input[type="text"], input[type="password"], input[type="number"], select {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.65rem 0.85rem;
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: 0.875rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, select:focus { 
+            border-color: var(--live-color); 
+            box-shadow: 0 0 0 3px var(--live-color-glow);
+        }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+        button {
+            cursor: pointer;
+            padding: 0.65rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: none;
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-primary { 
+            background: linear-gradient(135deg, #10b981, #047857); 
+            color: #040d0a; 
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        .btn-primary:hover { 
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+            opacity: 0.95;
+        }
+        .btn-danger { 
+            background: linear-gradient(135deg, #ef4444, #b91c1c); 
+            color: white; 
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+        }
+        .btn-danger:hover { 
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+            opacity: 0.95;
+        }
+        .btn-sec { 
+            background-color: transparent; 
+            border: 1px solid var(--border-color); 
+            color: var(--text-primary); 
+        }
+        .btn-sec:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .state-banner {
+            background-color: rgba(16, 185, 129, 0.08);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.85rem 1.15rem;
+            font-size: 0.85rem;
+            display: flex;
+            gap: 1.75rem;
+            align-items: center;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .console-half {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            overflow: hidden;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .console-half:last-child {
+            border-bottom: none;
+        }
+        .console-header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; padding-bottom: 0.5rem; }
+        .console-title { font-size: 0.8125rem; font-weight: 700; color: #34d399; font-family: var(--font-code); letter-spacing: 0.05em; }
+        .console-logs {
+            flex: 1;
+            overflow-y: auto;
+            font-family: var(--font-code);
+            font-size: 0.8125rem;
+            color: #34d399;
+            padding-top: 0.75rem;
+        }
+        .log-entry { margin-bottom: 0.5rem; white-space: pre-wrap; line-height: 1.45; border-bottom: 1px solid rgba(255,255,255,0.02); padding-bottom: 0.35rem; }
+        .log-error { color: #f87171; }
+        .log-success { color: #34d399; }
+        .log-info { color: #60a5fa; }
+        
+        .ws-status-badge {
+            padding: 0.25rem 0.65rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .ws-disconnected { background-color: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .ws-connected { background-color: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+        .diagram-section {
+            border-top: 1px dashed var(--border-color);
+            padding-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+        .diagram-section h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #34d399;
+        }
+        .mermaid {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Prominent Toggle Design */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            padding: 0.85rem 1.15rem;
+            border-radius: 10px;
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .toggle-label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .toggle-label span {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+        .toggle-label small {
+            font-size: 0.725rem;
+            color: var(--text-secondary);
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #334155;
+            transition: .3s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--live-color);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>CaRAG Live Multi-Tenant API</h1>
+            <div class="subtitle">Secure Tenancy, Group Isolation, and WebSocket Streaming Validation</div>
+        </div>
+        <a href="demo_core.html" style="color: #3b82f6; font-weight: 600; font-size: 0.875rem; text-decoration: none; border: 1px solid #3b82f6; padding: 0.4rem 0.8rem; border-radius: 6px; transition: background 0.2s;">
+            ← Switch to Core Engine (Port 8000)
+        </a>
+    </header>
+
+    <div class="main-layout">
+        <!-- Scrollable Action Pane (Left) -->
+        <div class="left-pane">
+            <!-- Context Info -->
+            <div class="state-banner" id="liveState">
+                <div><strong>Session Auth:</strong> <span id="lblToken" style="color: #f59e0b;">Unauthorized</span></div>
+                <div><strong>Selected Group ID:</strong> <span id="lblGroupId" style="color: #f59e0b;">None Selected</span></div>
+            </div>
+
+            <!-- Authentication Box -->
+            <div class="section-box">
+                <h3>1. User Access Management (POST /auth)</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div class="form-row">
+                        <label>Email Address</label>
+                        <input type="text" id="liveEmail" value="colleague@carag.com">
+                    </div>
+                    <div class="form-row">
+                        <label>Password</label>
+                        <input type="password" id="livePassword" value="securepassword123">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn-primary" onclick="handleRegister()">Register</button>
+                    <button class="btn-primary" onclick="handleLogin()">Login & Save Token</button>
+                    <button class="btn-sec" onclick="callApi('/auth/mapping', 'GET')">GET /auth/mapping (Public)</button>
+                </div>
+            </div>
+
+            <!-- Groups Setup -->
+            <div class="section-box">
+                <h3>2. Context Setup & Group Tenancy (POST/GET/DELETE)</h3>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end;">
+                    <div class="form-row">
+                        <label>New Group Name</label>
+                        <input type="text" id="groupName" placeholder="e.g. Policies Workspace">
+                    </div>
+                    <button class="btn-primary" onclick="createGroup()">Create Group</button>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: end; border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.25rem;">
+                    <div class="form-row">
+                        <label>Active Group ID</label>
+                        <input type="number" id="groupIdInput" placeholder="1" min="1" onchange="updateGroupId(this.value)">
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn-sec" onclick="getGroupDetails()">Get Group Details</button>
+                    </div>
+                    <button class="btn-danger" onclick="deleteGroup()">Delete Group</button>
+                </div>
+
+                <div class="btn-group" style="justify-content: space-between; width: 100%;">
+                    <button class="btn-sec" onclick="callApi('/groups/', 'GET')">List All My Groups (GET /groups)</button>
+                    <button class="btn-danger" onclick="resetLiveDb()">Reset Database (Wipe Users/Groups)</button>
+                </div>
+            </div>
+
+            <!-- Invites Testing -->
+            <div class="section-box">
+                <h3>3. Collaboration Invite Testing (POST /groups/{id}/invite)</h3>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end;">
+                    <div class="form-row">
+                        <label>Invitee's Registered Email</label>
+                        <input type="text" id="inviteEmail" placeholder="colleague@carag.com">
+                    </div>
+                    <button class="btn-primary" onclick="inviteMember()">Send Invite</button>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.5rem;">
+                    <label>Quick Invite Test Scenarios:</label>
+                    <div class="btn-group">
+                        <button class="btn-sec" style="font-size: 0.75rem;" onclick="setInviteScenario('unregistered')">Scenario A: Unregistered Email (Expect 404)</button>
+                        <button class="btn-sec" style="font-size: 0.75rem;" onclick="setInviteScenario('self')">Scenario B: Invite Yourself (Expect 400)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scoped Docs -->
+            <div class="section-box">
+                <h3>4. Group-Scoped Ingestion (POST / GET / DELETE)</h3>
+                <form id="docUploadForm" onsubmit="handleDocUpload(event)">
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Select PDF Document</label>
+                        <input type="file" id="groupFile" accept="application/pdf" required style="color: var(--text-secondary); font-size: 0.8125rem;">
+                    </div>
+                    <div class="form-row" style="margin-bottom: 0.75rem;">
+                        <label>Category Tag</label>
+                        <input type="text" id="groupDocCategory" placeholder="e.g. policies, financial">
+                    </div>
+                    <div class="toggle-container" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); margin-bottom: 0.75rem;">
+                        <div class="toggle-label">
+                            <span>Bypass LLM Ingestion</span>
+                            <small>Disable LLM Auto-Categorization/Summary/Consolidation</small>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="liveUploadBypassLlm">
+                            <span class="slider" style="background-color: #334155;"></span>
+                        </label>
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary">Upload Doc to Group</button>
+                        <button type="button" class="btn-sec" onclick="listGroupDocs()">List Group Docs</button>
+                        <button type="button" class="btn-sec" onclick="callApi(`/groups/${activeGroupId}/categories`, 'GET')">List Group Categories</button>
+                        <button type="button" class="btn-sec" onclick="listGroupCategoriesWithDocs()">List Categories & Summaries</button>
+                    </div>
+                </form>
+
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.5rem;">
+                    <div class="form-row">
+                        <label>Document ID to Delete</label>
+                        <input type="number" id="deleteDocId" placeholder="1">
+                    </div>
+                    <button class="btn-danger" onclick="deleteDoc()">Delete Doc</button>
+                </div>
+            </div>
+
+            <!-- Scoped Chat -->
+            <div class="section-box">
+                <h3>5. Scoped RAG Chat (POST /chat)</h3>
+                <form id="chatForm" onsubmit="handleChat(event)">
+                    <div class="form-row" style="margin-bottom: 0.5rem;">
+                        <label>Question</label>
+                        <input type="text" id="chatQuestion" placeholder="Ask questions isolated strictly to this group..." required>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <div class="form-row">
+                            <label>Document ID (Mode A Override)</label>
+                            <input type="number" id="chatDocId" placeholder="e.g. 1">
+                        </div>
+                        <div class="form-row">
+                            <label>Category (Mode B Override)</label>
+                            <input type="text" id="chatCategory" placeholder="e.g. policies">
+                        </div>
+                    </div>
+                    <div class="toggle-container">
+                        <div class="toggle-label">
+                            <span>Bypass LLM Generation</span>
+                            <small>Perform raw semantic vector search only (Zero API cost)</small>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="chatBypassLlm" value="true">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="form-row" style="margin-bottom: 1rem;">
+                        <label>Top-K Results Limit</label>
+                        <input type="number" id="chatTopK" value="5" min="1" max="100">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%;">Execute Scoped Chat</button>
+                </form>
+            </div>
+
+            <!-- WebSocket Playground -->
+            <div class="section-box" style="border: 1px solid var(--live-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>6. WebSocket Real-Time Testing (WS /ws)</h3>
+                    <span id="wsBadge" class="ws-status-badge ws-disconnected">Disconnected</span>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn-primary" onclick="connectWS()">Connect WebSocket</button>
+                    <button class="btn-danger" onclick="disconnectWS()">Disconnect</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
+                    <div class="form-row">
+                        <label>WS Question</label>
+                        <input type="text" id="wsQuestion" placeholder="e.g. Explain policies">
+                    </div>
+                    <div class="form-row">
+                        <label>WS Doc ID filter</label>
+                        <input type="number" id="wsDocId" placeholder="None">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div class="form-row">
+                        <label>WS Category filter</label>
+                        <input type="text" id="wsCategory" placeholder="None">
+                    </div>
+                    <div class="form-row">
+                        <label>WS Top-K</label>
+                        <input type="number" id="wsTopK" value="3">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn-primary" onclick="sendWSChat()">Send Chat Frame</button>
+                    <button class="btn-sec" onclick="sendWSPing()">Send Ping Frame</button>
+                </div>
+            </div>
+
+            <!-- Flow Diagram Section -->
+            <div class="diagram-section">
+                <h2>CaRAG Multi-Tenant Design</h2>
+                
+                <h3>System Architecture & Topology</h3>
+                <div class="mermaid">
+                    graph TD
+                        Client["Client / Telegram Bot / UI"] -->|"REST/WS Requests"| LiveAPI["CaRAG Live Backend (Port 8001)"]
+                        Client -->|"Duplex Chat / Progress"| WS["WebSocket Server"]
+                        
+                        subgraph LiveAPI_Sub ["Live Multi-Tenant Layer"]
+                            AuthGuard["JWT Auth Guard"] --> RouteValidator["Group Scope Validator"]
+                            RouteValidator --> Router["API Routing Handlers"]
+                        end
+
+                        Router -->|"Metadata CRUD"| Postgres[("PostgreSQL DB")]
+                        Router -->|"Retrieve / Route / Ingest"| CoreAPI["CaRAG Core Engine (Port 8000)"]
+                        
+                        subgraph CoreAPI_Sub ["Core CaRAG Engine"]
+                            LLMClass["LLM Classification Service"]
+                            MilvusConn["Milvus Store Client"]
+                        end
+                        
+                        CoreAPI -->|"Vector Searches"| Milvus[("Milvus Vector DB")]
+                        CoreAPI -->|"Consolidated Context"| Gemini["Google Gemini API"]
+
+                        style Client fill:#0c1612,stroke:#10b981,stroke-width:2px;
+                        style LiveAPI fill:#152720,stroke:#10b981,stroke-width:2px;
+                        style CoreAPI fill:#151f32,stroke:#3b82f6,stroke-width:2px;
+                        style Postgres fill:#1e293b,stroke:#a7f3d0,stroke-width:1px;
+                        style Milvus fill:#1e293b,stroke:#a7f3d0,stroke-width:1px;
+                </div>
+
+                <h3>Scoped Group Ingestion & Query sequence</h3>
+                <div class="mermaid">
+                    sequenceDiagram
+                        autonumber
+                        actor User as User Client
+                        participant Live as Live Backend (Port 8001)
+                        participant DB as Postgres DB
+                        participant Core as Core Engine (Port 8000)
+                        participant Milvus as Milvus DB
+                        participant Gemini as Google Gemini API
+
+                        User->>Live: "POST /auth/login (email, password)"
+                        Live->>DB: "Query User & verify password hash"
+                        DB-->>Live: "User verified"
+                        Live-->>User: "JWT token (claims: {sub: user_id})"
+
+                        User->>Live: "GET /groups/5 (Authorization: Bearer JWT)"
+                        Live->>DB: "Query GroupMember (group_id: 5, user_id)"
+                        alt Is NOT Member
+                            Live-->>User: "HTTP 403 Forbidden"
+                        else Is Member
+                            Live-->>User: "HTTP 200 OK"
+                        end
+
+                        User->>Live: "POST /groups/5/documents (Upload PDF)"
+                        Live->>DB: "Save Document metadata (status: uploaded)"
+                        Live->>Core: "Trigger Ingestion (document_id, file_path, group_id: 5)"
+                        Core->>Milvus: "Upsert chunks with group_id: 5 metadata"
+                        Live-->>User: "Broadcast WebSocket Event: doc_ready"
+
+                        User->>Live: "POST /groups/5/chat (question: '...', top_k: 5)"
+                        Live->>Core: "GET /chat (question, group_id: 5)"
+                        Core->>Milvus: "Search matching chunks (filter: group_id == 5)"
+                        Core->>Gemini: "Synthesize final answer using scoped chunks"
+                        Gemini-->>Core: "Grounded Answer"
+                        Core-->>Live: "Response"
+                        Live-->>User: "Scoped Answer & Citations"
+                </div>
+            </div>
+        </div>
+
+        <!-- Fixed Logs Pane (Right) -->
+        <div class="right-pane">
+            <!-- REST API Logs (Top Half) -->
+            <div class="console-half">
+                <div class="console-header">
+                    <span class="console-title">>_ REST API RESPONSES & ACTIONS</span>
+                    <button class="btn-sec" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="clearLogs('rest')">Clear</button>
+                </div>
+                <div class="console-logs" id="consoleLogs">
+                    <div class="log-entry log-info">[SYSTEM] Live Backend Console Initialized. targeted: http://localhost:8001</div>
+                </div>
+            </div>
+
+            <!-- WebSocket Logs (Bottom Half) -->
+            <div class="console-half">
+                <div class="console-header">
+                    <span class="console-title">>_ WEBSOCKET EVENT STREAM (REAL-TIME)</span>
+                    <button class="btn-sec" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="clearLogs('ws')">Clear</button>
+                </div>
+                <div class="console-logs" id="wsLogs" style="color: #67e8f9;">
+                    <div class="log-entry log-info">[WS SYSTEM] WebSocket logs ready. Make sure to connect.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose' });
+
+        const BASE_URL = "http://localhost:8001";
+        const WS_URL = "ws://localhost:8001/ws";
+        let activeToken = "";
+        let activeGroupId = null;
+        let wsConn = null;
+
+        function logRest(message, type = "info") {
+            const logsDiv = document.getElementById("consoleLogs");
+            const entry = document.createElement("div");
+            entry.className = `log-entry log-${type}`;
+            
+            let displayMsg = typeof message === "object" ? JSON.stringify(message, null, 2) : message;
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${displayMsg}`;
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function logWs(message, type = "info") {
+            const logsDiv = document.getElementById("wsLogs");
+            const entry = document.createElement("div");
+            entry.className = `log-entry log-${type}`;
+            
+            let displayMsg = typeof message === "object" ? JSON.stringify(message, null, 2) : message;
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${displayMsg}`;
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function clearLogs(type) {
+            if (type === 'rest') {
+                document.getElementById("consoleLogs").innerHTML = "";
+            } else {
+                document.getElementById("wsLogs").innerHTML = "";
+            }
+        }
+
+        function updateGroupId(val) {
+            activeGroupId = val ? parseInt(val) : null;
+            const lbl = document.getElementById("lblGroupId");
+            if (activeGroupId) {
+                lbl.innerText = `Group ${activeGroupId}`;
+                lbl.style.color = "#10b981";
+            } else {
+                lbl.innerText = "None Selected";
+                lbl.style.color = "#f59e0b";
+            }
+        }
+
+        async function callApi(endpoint, method = "GET", body = null) {
+            const url = `${BASE_URL}${endpoint}`;
+            logRest(`[REQUEST] ${method} ${url}`, "info");
+
+            const headers = {};
+            if (activeToken) {
+                headers["Authorization"] = `Bearer ${activeToken}`;
+            }
+            if (!(body instanceof FormData)) {
+                headers["Content-Type"] = "application/json";
+            }
+
+            try {
+                const config = { method: method, headers: headers };
+                if (body) {
+                    config.body = body instanceof FormData ? body : JSON.stringify(body);
+                }
+                const res = await fetch(url, config);
+                const data = await res.json();
+                
+                if (res.ok) {
+                    logRest(`[RESPONSE - Status ${res.status}]`, "success");
+                    logRest(data, "success");
+                } else {
+                    logRest(`[API ERROR - Status ${res.status}]`, "error");
+                    logRest(data, "error");
+                }
+                return data;
+            } catch (err) {
+                logRest(`[NETWORK ERROR] ${err.message}`, "error");
+            }
+        }
+
+        // =========================================================================
+        // USER AUTH ACTIONS
+        // =========================================================================
+        async function handleRegister() {
+            const email = document.getElementById("liveEmail").value;
+            const password = document.getElementById("livePassword").value;
+            await callApi("/auth/register", "POST", { email, password });
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById("liveEmail").value;
+            const password = document.getElementById("livePassword").value;
+            
+            const url = `${BASE_URL}/auth/login`;
+            logRest(`[REQUEST] POST ${url} (urlencoded)`, "info");
+
+            const details = { 'username': email, 'password': password };
+            let formBody = [];
+            for (let property in details) {
+                formBody.push(encodeURIComponent(property) + "=" + encodeURIComponent(details[property]));
+            }
+            formBody = formBody.join("&");
+
+            try {
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                    body: formBody
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    logRest(`[LOGIN SUCCESS]`, "success");
+                    logRest(data, "success");
+                    if (data.access_token) {
+                        activeToken = data.access_token;
+                        document.getElementById("lblToken").innerText = "Authorized (Token Saved)";
+                        document.getElementById("lblToken").style.color = "#10b981";
+                    }
+                } else {
+                    logRest(`[LOGIN FAILED - Status ${res.status}]`, "error");
+                    logRest(data, "error");
+                }
+            } catch (err) {
+                logRest(`[LOGIN ERROR] ${err.message}`, "error");
+            }
+        }
+
+        // =========================================================================
+        // GROUPS ACTIONS
+        // =========================================================================
+        async function createGroup() {
+            const name = document.getElementById("groupName").value;
+            if (!name) return;
+            const data = await callApi("/groups/", "POST", { name: name });
+            if (data && data.id) {
+                document.getElementById("groupIdInput").value = data.id;
+                updateGroupId(data.id);
+            }
+        }
+
+        async function getGroupDetails() {
+            if (!activeGroupId) {
+                logRest("[WARNING] Active Group ID required", "error");
+                return;
+            }
+            await callApi(`/groups/${activeGroupId}`, "GET");
+        }
+
+        async function deleteGroup() {
+            if (!activeGroupId) {
+                logRest("[WARNING] Active Group ID required to delete", "error");
+                return;
+            }
+            if (confirm(`Wipe group ${activeGroupId}? This drops Postgres schemas and deletes Milvus indices!`)) {
+                await callApi(`/groups/${activeGroupId}`, "DELETE");
+            }
+        }
+
+        async function resetLiveDb() {
+            if (confirm("Reset Live DB? This deletes all users, groups, and membership records, but preserves uploaded documents with cleared group associations.")) {
+                await callApi("/auth/reset", "POST");
+                activeToken = "";
+                activeGroupId = null;
+                document.getElementById("lblToken").innerText = "Unauthorized";
+                document.getElementById("lblToken").style.color = "#f59e0b";
+                document.getElementById("lblGroupId").innerText = "None Selected";
+                document.getElementById("lblGroupId").style.color = "#f59e0b";
+                document.getElementById("groupIdInput").value = "";
+            }
+        }
+
+        async function inviteMember() {
+            const email = document.getElementById("inviteEmail").value;
+            if (!activeGroupId || !email) {
+                logRest("[WARNING] Group ID and Invitee Email required", "error");
+                return;
+            }
+            await callApi(`/groups/${activeGroupId}/invite`, "POST", { email: email });
+        }
+
+        function setInviteScenario(type) {
+            const emailInput = document.getElementById("inviteEmail");
+            if (type === 'unregistered') {
+                emailInput.value = "nonexistent_email_12345@carag.com";
+                logRest("[SCENARIO] Configured email to test 404 (Unregistered)", "info");
+            } else if (type === 'self') {
+                emailInput.value = document.getElementById("liveEmail").value;
+                logRest("[SCENARIO] Configured email to test 400 (Invite Yourself)", "info");
+            }
+        }
+
+        // =========================================================================
+        // SCOPED DOCUMENT ACTIONS
+        // =========================================================================
+        async function handleDocUpload(event) {
+            event.preventDefault();
+            if (!activeGroupId) {
+                logRest("[WARNING] Scope Group ID required to upload document!", "error");
+                return;
+            }
+            const fileInput = document.getElementById("groupFile");
+            const categoryInput = document.getElementById("groupDocCategory");
+
+            if (!fileInput.files.length) return;
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            
+            const cat = categoryInput.value.trim();
+            if (cat) {
+                formData.append("category", cat);
+            }
+
+            const bypassVal = document.getElementById("liveUploadBypassLlm").checked;
+            formData.append("bypass_llm", bypassVal);
+
+            const url = `${BASE_URL}/groups/${activeGroupId}/documents`;
+            logRest(`[REQUEST] POST ${url} (Multipart Form)`, "info");
+
+            try {
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${activeToken}` },
+                    body: formData
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    logRest(`[UPLOAD SUCCESS - Status ${res.status}]`, "success");
+                    logRest(data, "success");
+                } else {
+                    logRest(`[UPLOAD FAIL - Status ${res.status}]`, "error");
+                    logRest(data, "error");
+                }
+            } catch (err) {
+                logRest(`[API ERROR] ${err.message}`, "error");
+            }
+        }
+
+        async function listGroupDocs() {
+            if (!activeGroupId) {
+                logRest("[WARNING] Active Group ID required to list documents", "error");
+                return;
+            }
+            await callApi(`/groups/${activeGroupId}/documents`, "GET");
+        }
+
+        async function listGroupCategoriesWithDocs() {
+            if (!activeGroupId) {
+                logRest("[WARNING] Active Group ID required to list categories & summaries", "error");
+                return;
+            }
+            await callApi(`/groups/${activeGroupId}/categories-with-docs`, "GET");
+        }
+
+        async function deleteDoc() {
+            const docId = document.getElementById("deleteDocId").value;
+            if (!activeGroupId || !docId) {
+                logRest("[WARNING] Group ID and Document ID required", "error");
+                return;
+            }
+            await callApi(`/groups/${activeGroupId}/documents/${docId}`, "DELETE");
+        }
+
+        // =========================================================================
+        // SCOPED CHAT ACTIONS
+        // =========================================================================
+        async function handleChat(event) {
+            event.preventDefault();
+            if (!activeGroupId) {
+                logRest("[WARNING] Active Group ID required to execute RAG", "error");
+                return;
+            }
+            const question = document.getElementById("chatQuestion").value;
+            const docIdVal = document.getElementById("chatDocId").value;
+            const category = document.getElementById("chatCategory").value.trim();
+            const topK = parseInt(document.getElementById("chatTopK").value);
+            const bypass = document.getElementById("chatBypassLlm").checked;
+
+            const payload = {
+                question: question,
+                top_k: topK,
+                document_id: docIdVal ? parseInt(docIdVal) : null,
+                category: category ? category : null
+            };
+            if (bypass) {
+                payload.bypass_llm = true;
+            }
+
+            await callApi(`/groups/${activeGroupId}/chat`, "POST", payload);
+        }
+
+        // =========================================================================
+        // WEBSOCKET PLAYGROUND ACTIONS
+        // =========================================================================
+        function connectWS() {
+            if (!activeToken) {
+                logWs("[WS WARNING] Cannot connect: You must login first to obtain a JWT token!", "error");
+                return;
+            }
+            if (!activeGroupId) {
+                logWs("[WS WARNING] Cannot connect: You must select a Group ID first!", "error");
+                return;
+            }
+
+            const url = `${WS_URL}/?token=${activeToken}&group_id=${activeGroupId}`;
+            logWs(`[WS CONNECT] Establishing tunnel on: ${url}`, "info");
+
+            wsConn = new WebSocket(url);
+
+            wsConn.onopen = function() {
+                logWs("[WS SUCCESS] WebSocket Connected 🟢", "success");
+                const badge = document.getElementById("wsBadge");
+                badge.innerText = "Connected";
+                badge.className = "ws-status-badge ws-connected";
+            };
+
+            wsConn.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                logWs(`[WS RECEIVE] Event: ${message.event || message.type}`, "success");
+                logWs(message, "success");
+            };
+
+            wsConn.onerror = function(error) {
+                logWs(`[WS ERROR] Socket hit an error state`, "error");
+            };
+
+            wsConn.onclose = function(event) {
+                logWs(`[WS CLOSED] Code: ${event.code}, Clean: ${event.wasClean}`, "error");
+                const badge = document.getElementById("wsBadge");
+                badge.innerText = `Closed (Code ${event.code})`;
+                badge.className = "ws-status-badge ws-disconnected";
+                wsConn = null;
+            };
+        }
+
+        function disconnectWS() {
+            if (wsConn) {
+                wsConn.close();
+            } else {
+                logWs("[WS WARNING] No active WebSocket connection to close", "error");
+            }
+        }
+
+        function sendWSChat() {
+            if (!wsConn || wsConn.readyState !== WebSocket.OPEN) {
+                logWs("[WS WARNING] Socket is offline. Connect first!", "error");
+                return;
+            }
+            const q = document.getElementById("wsQuestion").value;
+            const docId = document.getElementById("wsDocId").value;
+            const cat = document.getElementById("wsCategory").value.trim();
+            const topK = parseInt(document.getElementById("wsTopK").value);
+
+            if (!q) {
+                logWs("[WS WARNING] Question required to send chat frame", "error");
+                return;
+            }
+
+            const frame = {
+                type: "chat",
+                question: q,
+                top_k: topK
+            };
+            if (docId) frame.document_id = parseInt(docId);
+            if (cat) frame.category = cat;
+
+            logWs(`[WS SEND] ${JSON.stringify(frame)}`, "info");
+            wsConn.send(JSON.stringify(frame));
+        }
+
+        function sendWSPing() {
+            if (!wsConn || wsConn.readyState !== WebSocket.OPEN) {
+                logWs("[WS WARNING] Socket is offline. Connect first!", "error");
+                return;
+            }
+            const frame = { type: "ping" };
+            logWs(`[WS SEND] ${JSON.stringify(frame)}`, "info");
+            wsConn.send(JSON.stringify(frame));
+        }
+    </script>
+</body>
+</html>

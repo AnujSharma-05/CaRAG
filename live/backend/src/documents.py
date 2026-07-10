@@ -40,6 +40,7 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), # Upload the PDF file
     category: str | None = Form(None), # Optional category for the document
+    bypass_llm: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -86,7 +87,7 @@ async def upload_document(
         db.commit()
 
     # Kick off the original CaRAG engine's ingestion pipeline in the background with WS events
-    async def process_document_task_with_ws(doc_id: int, filename: str, group_id: int):
+    async def process_document_task_with_ws(doc_id: int, filename: str, group_id: int, bypass_llm: bool = False):
         from .ws_manager import manager
         from .database import sessionLocal
         
@@ -97,7 +98,7 @@ async def upload_document(
         })
         
         # Run the async ingestion task
-        await services.process_document_task(doc_id, filename)
+        await services.process_document_task(doc_id, filename, bypass_llm)
         
         # Fetch the updated doc status
         db_session = sessionLocal()
@@ -121,8 +122,15 @@ async def upload_document(
         finally:
             db_session.close()
 
-    background_tasks.add_task(process_document_task_with_ws, new_doc.id, file.filename, group_id)
-    return new_doc
+    background_tasks.add_task(process_document_task_with_ws, new_doc.id, file.filename, group_id, bypass_llm)
+    return {
+        "id": new_doc.id,
+        "filename": new_doc.filename,
+        "status": new_doc.status,
+        "file_size": new_doc.file_size if new_doc.file_size is not None else (os.path.getsize(new_doc.file_path) if new_doc.file_path and os.path.exists(new_doc.file_path) else 0),
+        "group_id": new_doc.group_id,
+        "categories": [c.name for c in new_doc.categories] if new_doc.categories else ["general"]
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -137,7 +145,17 @@ async def list_documents(
     _assert_membership(db, group_id, current_user.id)
 
     docs = db.query(models.Document).filter(models.Document.group_id == group_id).all()
-    return docs
+    return [
+        {
+            "id": doc.id,
+            "filename": doc.filename,
+            "status": doc.status,
+            "file_size": doc.file_size if doc.file_size is not None else (os.path.getsize(doc.file_path) if doc.file_path and os.path.exists(doc.file_path) else 0),
+            "group_id": doc.group_id,
+            "categories": [c.name for c in doc.categories] if doc.categories else ["general"]
+        }
+        for doc in docs
+    ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

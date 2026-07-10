@@ -29,22 +29,6 @@ app.add_middleware(
 
 
 #the server startup command is: uvicorn src.main:app --reload
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @app.get("/ping")
 async def ping():
     print("PING HIT")
@@ -58,6 +42,7 @@ async def upload_pdf(
     background_tasks: BackgroundTasks, #This is a special parameter that allows us to run tasks in the background without blocking the main thread. In this case, we will use it to trigger the document processing task after the file is uploaded.(always kept as the first parameter in the function definition)
     file: UploadFile = File(...), 
     category: str | None = Form(None),
+    bypass_llm: bool = Form(False),
     db: Session = Depends(get_db)
     ):
     if file.content_type != "application/pdf":
@@ -101,7 +86,7 @@ async def upload_pdf(
     db.commit()
 
     # Trigger ingestion in background; task creates its own DB session.
-    background_tasks.add_task(services.process_document_task, new_doc.id, file.filename)
+    background_tasks.add_task(services.process_document_task, new_doc.id, file.filename, bypass_llm)
     
     return {
         "id": new_doc.id,
@@ -290,5 +275,26 @@ async def clean_system():
         "garbage_collected": True,
         "zombies_killed": killed_count
     }
+
+
+@app.get("/categories-with-docs")
+async def get_categories_with_docs(db: Session = Depends(get_db)):
+    categories = db.query(models.Category).filter(models.Category.group_id.is_(None)).all()
+    result = []
+    for cat in categories:
+        docs_list = []
+        for doc in cat.documents:
+            docs_list.append({
+                "id": doc.id,
+                "filename": doc.filename,
+                "status": doc.status
+            })
+        result.append({
+            "category": cat.name,
+            "summary": cat.summary or "No summary generated yet.",
+            "documents": docs_list
+        })
+    return result
+
 
 

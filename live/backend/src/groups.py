@@ -156,3 +156,37 @@ async def delete_group(
     db.commit()
 
     return {"message": "Group deleted successfully"}
+
+
+@router.get("/{group_id}/categories-with-docs")
+async def get_group_categories_with_docs(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Check membership
+    is_member = db.query(models.GroupMember).filter(
+        models.GroupMember.group_id == group_id,
+        models.GroupMember.user_id == current_user.id
+    ).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="You are not a member of this group.")
+
+    categories = db.query(models.Category).filter(models.Category.group_id == group_id).all()
+    result = []
+    for cat in categories:
+        docs_list = []
+        for doc in cat.documents:
+            # Only include documents scoped to this group
+            if doc.group_id == group_id:
+                docs_list.append({
+                    "id": doc.id,
+                    "filename": doc.filename,
+                    "status": doc.status
+                })
+        result.append({
+            "category": cat.name,
+            "summary": cat.summary or "No summary generated yet.",
+            "documents": docs_list
+        })
+    return result

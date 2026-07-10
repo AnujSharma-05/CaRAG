@@ -98,7 +98,7 @@ def _embed_query(text: str) -> list[float]:
     return _embed_texts([text])[0]
 
 
-async def update_categorical_summary(category_name: str, group_id: int | None = None) -> None:
+async def update_categorical_summary(category_name: str, group_id: int | None = None, bypass_llm: bool = False) -> None:
     """Consolidate document contents in the category and update its Milvus summary embedding."""
     if not category_name or category_name == "general":
         return
@@ -117,43 +117,57 @@ async def update_categorical_summary(category_name: str, group_id: int | None = 
         if not docs:
             return
 
-        # Compile summaries or first/last chunks of documents to create a category context
-        context_parts = []
-        for doc in docs:
-            # Extract first 5 and last 2 pages of PDF on-the-fly
-            doc_context = _extract_summary_text_from_pdf(doc.file_path)
-            meta_info = f"Document: {doc.filename}\nSize: {doc.file_size or 0} bytes\n"
-            context_parts.append(meta_info + doc_context[:4000])
+        if bypass_llm:
+            # Heuristic fallback summary for local offline, token-saving, or rate-limit testing
+            doc_titles = ", ".join([d.filename for d in docs])
+            summary_text = f"This category of documents covers topics related to {category_name}. It includes files like: {doc_titles}."
+        else:
+            # Compile summaries or first/last chunks of documents to create a category context
+            context_parts = []
+            for doc in docs:
+                # Extract first 5 and last 2 pages of PDF on-the-fly
+                doc_context = _extract_summary_text_from_pdf(doc.file_path)
+                meta_info = f"Document: {doc.filename}\nSize: {doc.file_size or 0} bytes\n"
+                context_parts.append(meta_info + doc_context[:4000])
 
-        category_context = "\n\n".join(context_parts)
-        
-        # Call LLM to generate summary
-        prompt = f"""
-            Generate a concise, unified 2-3 sentence summary describing the scope and topic of this category of documents.
-            Category Name: {category_name}
-            Documents Context:
-            {category_context}
-        """
-        
-        try:
-            from .llm_service import model
-            response = await asyncio.to_thread(
-                model.generate_content,
-                prompt,
-            )
-            summary_text = response.text.strip()
-        except Exception as exc:
-            err_msg = str(exc)
-            if "429" in err_msg or "quota" in err_msg.lower() or "limit" in err_msg.lower():
-                # Heuristic fallback summary for local offline or rate-limit testing
-                doc_titles = ", ".join([d.filename for d in docs])
-                summary_text = f"This category of documents covers topics related to {category_name}. It includes files like: {doc_titles}."
-            else:
-                raise exc
+            category_context = "\n\n".join(context_parts)
+            
+            # Call LLM to generate summary
+            prompt = f"""
+                Generate a concise, unified 2-3 sentence summary describing the scope and topic of this category of documents.
+                Category Name: {category_name}
+                Documents Context:
+                {category_context}
+            """
+            
+            try:
+                from .llm_service import model
+                response = await asyncio.to_thread(
+                    model.generate_content,
+                    prompt,
+                )
+                summary_text = response.text.strip()
+            except Exception as exc:
+                err_msg = str(exc)
+                if "429" in err_msg or "quota" in err_msg.lower() or "limit" in err_msg.lower():
+                    # Heuristic fallback summary for local offline or rate-limit testing
+                    doc_titles = ", ".join([d.filename for d in docs])
+                    summary_text = f"This category of documents covers topics related to {category_name}. It includes files like: {doc_titles}."
+                else:
+                    raise exc
         
         # Generate summary embedding
         summary_vector = _embed_query(summary_text)
         
+        # Update summary in SQL
+        cat_obj = db.query(models.Category).filter(
+            models.Category.name == category_name,
+            models.Category.group_id == group_id
+        ).first()
+        if cat_obj:
+            cat_obj.summary = summary_text
+            db.commit()
+
         # Upsert in Milvus
         milvus_store.upsert_category_summary(
             category_name=category_name,
@@ -169,8 +183,10 @@ async def update_categorical_summary(category_name: str, group_id: int | None = 
         db.close()
 
 
-async def consolidate_categories(group_id: int | None) -> None:
+async def consolidate_categories(group_id: int | None, bypass_llm: bool = False) -> None:
     """Consolidate/generalize specific categories under parent categories like 'Harry Potter Books', 'Novels', etc."""
+    if bypass_llm:
+        return
     db: Session = sessionLocal()
     try:
         # Get all distinct categories in the group
@@ -258,7 +274,7 @@ async def consolidate_categories(group_id: int | None) -> None:
             db.commit()
             
             # Rewrite parent category summary
-            await update_categorical_summary(parent_name, group_id)
+            await update_categorical_summary(parent_name, group_id, bypass_llm=bypass_llm)
 
     except Exception as e:
         print("Failed to consolidate categories:", e)
@@ -266,7 +282,7 @@ async def consolidate_categories(group_id: int | None) -> None:
         db.close()
 
 
-async def process_document_task(doc_id: int, filename: str) -> None:
+async def process_document_task(doc_id: int, filename: str, bypass_llm: bool = False) -> None:
     """Background ingestion pipeline for uploaded PDFs."""
     db: Session = sessionLocal()
     try:
@@ -308,7 +324,7 @@ async def process_document_task(doc_id: int, filename: str) -> None:
                 print("Milvus category search skipped/failed:", e)
  
             # 2. Fallback to LLM Classification
-            if resolved_category_name == "general":
+            if resolved_category_name == "general" and not bypass_llm:
                 try:
                     # Get unique category names in this group from PostgreSQL
                     categories_objs = db.query(models.Category).filter(models.Category.group_id == doc.group_id).all()
@@ -373,10 +389,10 @@ async def process_document_task(doc_id: int, filename: str) -> None:
 
         # Trigger summary update for all categories associated with this document
         for cat in doc.categories:
-            await update_categorical_summary(cat.name, doc.group_id)
+            await update_categorical_summary(cat.name, doc.group_id, bypass_llm=bypass_llm)
 
         # Trigger dynamic parent category consolidation / merging
-        await consolidate_categories(doc.group_id)
+        await consolidate_categories(doc.group_id, bypass_llm=bypass_llm)
 
     except Exception as exc:  # pragma: no cover - safety path for async task
         db.rollback()
