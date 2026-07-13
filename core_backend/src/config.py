@@ -17,8 +17,8 @@ MILVUS_EF_SEARCH = int(os.getenv("MILVUS_EF_SEARCH", "64"))
 
 # === Retrieval Optimization ===
 CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-# Defaulting to -999.0 (disabled) until score distributions are analyzed in production
-CROSS_ENCODER_THRESHOLD = float(os.getenv("CROSS_ENCODER_THRESHOLD", "-999.0"))
+# Hardcoded to 0.0 for upcoming demonstration (rejects chunks with negative confidence)
+CROSS_ENCODER_THRESHOLD = float(os.getenv("CROSS_ENCODER_THRESHOLD", "0.0"))
 LOG_RETRIEVAL_SCORES = os.getenv("LOG_RETRIEVAL_SCORES", "True").lower() == "true"
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
