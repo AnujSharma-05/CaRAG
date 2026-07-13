@@ -3,9 +3,14 @@ import time
 from typing import Any
 
 from .config import (
+    MILVUS_URI, 
     MILVUS_COLLECTION,
+    MILVUS_CATEGORIES_COLLECTION_NAME,
+    MILVUS_INDEX_TYPE,
+    MILVUS_M,
+    MILVUS_EF_CONSTRUCTION,
+    MILVUS_EF_SEARCH,
     EMBEDDING_DIM,
-    MILVUS_URI,
 )
 
 from pymilvus import MilvusClient, DataType
@@ -75,10 +80,20 @@ class MilvusStore:
         
         # Prepare vector index
         index_params = client.prepare_index_params()
+        
+        idx_params = {"metric_type": "COSINE"}
+        if MILVUS_INDEX_TYPE.upper() == "HNSW":
+            idx_params["index_type"] = "HNSW"
+            idx_params["params"] = {
+                "M": MILVUS_M,
+                "efConstruction": MILVUS_EF_CONSTRUCTION
+            }
+        else:
+            idx_params["index_type"] = "AUTOINDEX"
+            
         index_params.add_index(
             field_name="vector",
-            index_type="AUTOINDEX",
-            metric_type="COSINE"
+            **idx_params
         )
         client.create_index(
             collection_name=collection_name,
@@ -142,6 +157,7 @@ class MilvusStore:
             "data": [query_embedding],
             "limit": top_k,
             "output_fields": ["document_id", "chunk_index", "content"],
+            "search_params": {"metric_type": "COSINE", "params": {"ef": MILVUS_EF_SEARCH}}
         }
         if document_id is not None:
             search_kwargs["filter"] = f"document_id == {document_id}"
@@ -221,6 +237,7 @@ class MilvusStore:
             "data": [query_embedding],
             "limit": top_k,
             "output_fields": ["category_name", "summary", "group_id"],
+            "search_params": {"metric_type": "COSINE", "params": {"ef": MILVUS_EF_SEARCH}}
         }
         
         if group_id is not None:

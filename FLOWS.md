@@ -262,10 +262,15 @@ sequenceDiagram
         end
     end
 
-    %% ── Stage 2: Cross-Encoder Reranking ──
+    %% ── Stage 2: Cross-Encoder Reranking & Confidence Gate ──
     Note over API: ── STAGE 2: CROSS-ENCODER RERANKING ──
     API->>API: scores = CrossEncoder.predict([query, chunk] for chunk in hits)
     API->>API: Sort hits descending by scores, keep top_k
+    
+    alt hits[0].cross_score < CROSS_ENCODER_THRESHOLD
+        API-->>Client: 200 {answer="I could not find sufficiently relevant information..."}
+        Note over API,Client: Retrieval Confidence Gate Triggered — Halt execution
+    end
 
     %% ── Answer Synthesis ──
     Note over API,GEM: ── LLM Call 2: Answer Synthesis ──
@@ -582,10 +587,15 @@ sequenceDiagram
         end
     end
 
-    %% ── Stage 2: Cross-Encoder Reranking ──
+    %% ── Stage 2: Cross-Encoder Reranking & Confidence Gate ──
     Note over LIVE: ── STAGE 2: CROSS-ENCODER RERANKING ──
-    LIVE->>LIVE: scores = CROSS_ENCODER.predict([query, chunk] for chunk in hits)
-    LIVE->>LIVE: Sort hits descending by cross_score, keep top_k
+    LIVE->>LIVE: scores = CrossEncoder.predict([query, chunk] for chunk in hits)
+    LIVE->>LIVE: Sort hits descending by scores, keep top_k
+    
+    alt hits[0].cross_score < CROSS_ENCODER_THRESHOLD
+        LIVE-->>Client: 200 {answer="I could not find sufficiently relevant information..."}
+        Note over LIVE,Client: Retrieval Confidence Gate Triggered — Halt execution
+    end
 
     %% ── Answer Synthesis ──
     Note over LIVE,GEM: ── LLM Call 2: Answer Synthesis ──
