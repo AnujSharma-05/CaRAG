@@ -5,6 +5,7 @@ from . import models, schemas
 from .database import get_db
 from .auth import get_current_user
 from src.milvus_store import milvus_store
+from src.config import CROSS_ENCODER_THRESHOLD, LOG_RETRIEVAL_SCORES
 
 router = APIRouter()
 
@@ -214,6 +215,32 @@ async def group_chat(
         
         # 5. Take top-k 
         hits = hits[:payload.top_k]
+
+        # === METRICS LOGGING & CONFIDENCE GATE ===
+        gate_triggered = False
+        top_score = hits[0]["cross_score"] if hits else -999.0
+        score_gap = (hits[0]["cross_score"] - hits[1]["cross_score"]) if len(hits) > 1 else 0.0
+
+        if top_score < CROSS_ENCODER_THRESHOLD and CROSS_ENCODER_THRESHOLD != -999.0:
+            gate_triggered = True
+
+        if LOG_RETRIEVAL_SCORES:
+            print(f"\n--- [RETRIEVAL METRICS LOG] ---")
+            print(f"Group ID: {group_id}")
+            print(f"Query: {payload.question}")
+            print(f"Category: {chosen_category if 'chosen_category' in locals() else 'None'}")
+            print(f"Top Cross-Score: {top_score:.4f}")
+            print(f"Score Gap (Top1 - Top2): {score_gap:.4f}")
+            print(f"Final Context Size: {len(hits)} chunks")
+            print(f"Gate Triggered: {gate_triggered} (Threshold: {CROSS_ENCODER_THRESHOLD})")
+            print(f"Action: {'REJECTED' if gate_triggered else 'ACCEPTED'}")
+            print(f"-------------------------------\n")
+
+        if gate_triggered:
+            return schemas.ChatResponse(
+                answer="I could not find sufficiently relevant information in the uploaded documents to answer this question.",
+                citations=[],
+            )
 
         print("\n========== FINAL RERANKED CHUNKS ==========")
         for idx, hit in enumerate(hits):
